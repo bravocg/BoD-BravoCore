@@ -508,19 +508,41 @@ BRAVO.Core = function () {
         // Update the function name
         funcName = updateFunctionName(funcName, args, sendDataInBodyFl ? null : data);
 
-        // Execute the request
-        response = executeMethod(this, method, metadataType, funcName, data, headers);
-        response = response ? JSON.parse(response) : response;
-        if (response.d && response.d.__metadata) {
-            // Set the global variables
-            var uriInfo = getUriInfo(this, response.d.__metadata.uri);
+        // Method to process the request
+        var processRequest = function (obj, response) {
+            // Parse the response
+            response = response ? JSON.parse(response) : response;
+            if (response.d && response.d.__metadata) {
+                // Set the global variables
+                var uriInfo = getUriInfo(obj, response.d.__metadata.uri);
 
-            // Return the object
-            return new BRAVO.Core.Object(uriInfo.url, uriInfo.endPoint, this.asyncFl, response.d);
+                // Return the object
+                return new BRAVO.Core.Object(uriInfo.url, uriInfo.endPoint, obj.asyncFl, response.d);
+            }
+
+            // Return the generic object
+            return response;
+        };
+
+        // See if we are making an asynchronous request
+        if (this.asyncFl) {
+            var promise = new BRAVO.Core.Promise();
+
+            // Execute the request
+            executeMethod(this, method, metadataType, funcName, data, headers).done(function (obj, response) {
+                // Process the response and resolve the promise
+                promise.resolve(processRequest(obj, response));
+            });
+
+            // Return the promise
+            return promise;
         }
 
-        // Return the generic object
-        return response;
+        // Execute the request
+        response = executeMethod(this, method, metadataType, funcName, data, headers);
+
+        // Process the request and return it
+        return processRequest(this, response);
     };
 
     // Execute Request
@@ -589,8 +611,8 @@ BRAVO.Core = function () {
 
                 // Set the state change event
                 xhr.onreadystatechange = function () {
-                    // Ensure the request was successful
-                    if (xhr.readyState == 4 && xhr.status == "200") {
+                    // See if the request has finished
+                    if (xhr.readyState == 4) {
                         // Resolve the promise
                         promise.resolve(obj, xhr.response);
                     }
@@ -850,11 +872,20 @@ BRAVO.Core = function () {
         // See if an update is needed
         if (this[name] != null && this[name] == value) { return; }
 
+        // Store the current setting, and disable the asynchronous flag
+        var isAsync = this.asyncFl;
+        this.asyncFl = false;
+
         // Create the data to update the property
         var data = '{ "' + name + '": ' + (typeof (value) == "string" ? '"' + value + '"' : value) + ' }';
 
         // Execute the request
         var response = executeMethod(this, "MERGE", this.__metadata.type, null, JSON.parse(data), { "IF-MATCH": "*" });
+
+        // Reset the asynchronous flag
+        this.asyncFl = isAsync;
+
+        // See if the update was successful
         if (response == "") {
             // Update the property in the current object
             this[name] = value;
