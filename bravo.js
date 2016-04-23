@@ -763,29 +763,30 @@ BRAVO.Core = function () {
             }
 
             // Check the permissions against the root web
-            return (new BRAVO.Core.Web(rootWebUrl)).hasAccess(permissions);
+            hasPermissionFl = (new BRAVO.Core.Web(rootWebUrl)).hasAccess(permissions);
         }
+        else {
+            // See if this is a web
+            if (obj.__metadata.type == "SP.Web") {
+                // Set the user name
+                userName = userName || obj.get_CurrentUser().LoginName;
+            }
 
-        // See if this is a web
-        if (obj.__metadata.type == "SP.Web") {
-            // Set the user name
-            userName = userName || obj.get_CurrentUser().LoginName;
-        }
+            // Get the permissions of the current user
+            var userPermissions = obj.getUserEffectivePermissions(userName);
+            if (userPermissions.exists) {
+                // Default the permission flag
+                hasPermissionFl = true;
 
-        // Get the permissions of the current user
-        var userPermissions = obj.getUserEffectivePermissions(userName);
-        if (userPermissions.exists) {
-            // Default the permission flag
-            hasPermissionFl = true;
+                // Set the permissions
+                var basePermissions = new SP.BasePermissions();
+                basePermissions.initPropertiesFromJson(userPermissions.GetUserEffectivePermissions);
 
-            // Set the permissions
-            var basePermissions = new SP.BasePermissions();
-            basePermissions.initPropertiesFromJson(userPermissions.GetUserEffectivePermissions);
-
-            // Parse the permissions
-            for (var i = 0; i < permissions.length; i++) {
-                // Determine if the user has the specified permission
-                hasPermissionFl &= basePermissions.has(permissions[i]);
+                // Parse the permissions
+                for (var i = 0; i < permissions.length; i++) {
+                    // Determine if the user has the specified permission
+                    hasPermissionFl &= basePermissions.has(permissions[i]);
+                }
             }
         }
 
