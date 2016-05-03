@@ -3,7 +3,7 @@
 /*
 * Title: Bravo Core Library
 * Source: https://github.com/bravocg/core
-* Version: v1.3.0
+* Version: v1.4
 * Author: Gunjan Datta
 * Description: The Bravo core library translates the REST api as an object model.
 * 
@@ -157,6 +157,23 @@ BRAVO.Core = function () {
             // User Custom Action
             "SP.UserCustomAction": {
                 post: ["deleteObject"]
+            },
+            // People Manager
+            "SP.UserProfiles.PeopleManager": {
+                get: ["amlFollowedBy", "amlFollowing", "getFollowedTags", "getFollowersFor", "getMyFollowers", "getMyProperties", "getMySuggestions",
+                    "getPeopleFollowedBy", "getPeopleFollowedByMe", "getPropertiesFor", "getUserProfilePropertyFor"],
+                getAppendMethodToEndPoint: ["getTrendingTags", "isFollowing"],
+                post: ["follow", "followTag", "hideSuggestion", "stopFollowing", "stopFollowingTag"],
+                postDataInBody: ["setMyProfilePicture"]
+            },
+            // Profile Loader
+            "SP.UserProfiles.ProfileLoader": {
+                post: ["getOwnerUserProfile", "getUserProfile"],
+                postDataInBody: ["createPersonalSiteEnqueueBulk"]
+            },
+            // User Profile
+            "SP.UserProfiles.UserProfile": {
+                post: ["createPersonalSiteEnque", "shareAllSocialData"]
             },
             // View
             "SP.View": {
@@ -380,6 +397,11 @@ BRAVO.Core = function () {
                         obj[method] = new Function("args",
                             "return this.executeGet('" + method + "', args);");
                         break;
+                    case "getAppendMethodToEndPoint":
+                        // Add the method
+                        obj[method] = new Function("args",
+                            "return this.executeGet(null, args, null, null, null, null, '" + method + "');");
+                        break;
                     case "getBuffer":
                         // Add the method
                         obj[method] = new Function("args",
@@ -404,6 +426,11 @@ BRAVO.Core = function () {
                         // Add the method
                         obj[method] = new Function("args", "data", "type",
                             "return this.executePost('" + method + "', args, data, false, type);");
+                        break;
+                    case "postAppendMethodToEndPoint":
+                        // Add the method
+                        obj[method] = new Function("args", "data", "type",
+                            "return this.executePost(null, args, data, false, type, null, '" + method + "');");
                         break;
                     case "postDataAsParameter":
                         // Add the method
@@ -442,7 +469,8 @@ BRAVO.Core = function () {
     // sendDataInBodyFl - Flag to send the data in the request body.
     // bufferFl - Flag to indicate the response is an array buffer.
     // metadataType - The metadata type.
-    var executeGet = function (funcName, args, data, sendDataInBodyFl, bufferFl, metadataType) {
+    // endPoint - The sub-method of the api's endpoint.
+    var executeGet = function (funcName, args, data, sendDataInBodyFl, bufferFl, metadataType, endPoint) {
         // See if we are sending the data as the request body
         if (sendDataInBodyFl) { return executeMethod(this, "GET", metadataType, funcName, data, null, bufferFl); }
 
@@ -452,8 +480,11 @@ BRAVO.Core = function () {
         // Update the function name
         funcName = updateFunctionName(funcName, args, data);
 
+        // Update the url
+        var url = this.TargetEndPoint + (endPoint ? "." + endPoint : "") + (funcName ? "/" + funcName : "");
+
         // Return a new request
-        return new BRAVO.Core.Object(this.TargetUrl, this.TargetEndPoint + "/" + funcName, this.asyncFl);
+        return new BRAVO.Core.Object(this.TargetUrl, url, this.asyncFl);
     };
 
     // Execute Method
@@ -494,19 +525,23 @@ BRAVO.Core = function () {
     // data - The function parameters passed as a data object.
     // sendDataInBodyFl - Flag to send the data in the request body.
     // metadataType - The metadata type.
-    // method - The method type.
-    var executePost = function (funcName, args, data, sendDataInBodyFl, metadataType, method) {
+    // methodType - The method type.
+    // endPoint - The sub-method of the api's endpoint.
+    var executePost = function (funcName, args, data, sendDataInBodyFl, metadataType, methodType, endPoint) {
         var headers = null;
         var response = null;
 
         // Update the headers, based on the method
-        method = method ? method : "POST";
-        if (method == "DELETE" || method == "MERGE") {
+        methodType = methodType ? methodType : "POST";
+        if (methodType == "DELETE" || methodType == "MERGE") {
             headers = { "IF-MATCH": "*" };
         }
 
         // Update the function name
         funcName = updateFunctionName(funcName, args, sendDataInBodyFl ? null : data);
+
+        // Update the end point
+        if (endPoint) { this.TargetEndPoint += "." + endPoint; }
 
         // Method to process the request
         var processRequest = function (obj, response) {
@@ -517,10 +552,10 @@ BRAVO.Core = function () {
                 var uriInfo = getUriInfo(obj, response.d.__metadata.uri);
 
                 // Return the object
-                return new BRAVO.Core.Object(uriInfo.url, uriInfo.endPoint, obj.asyncFl, response.d);
+                return new BRAVO.Core.Object(uriInfo.url, uriInfo.endPoint, obj.asyncFl, response);
             }
 
-            // Return the generic object
+            // Return the response
             return response;
         };
 
@@ -529,7 +564,7 @@ BRAVO.Core = function () {
             var promise = new BRAVO.Core.Promise();
 
             // Execute the request
-            executeMethod(this, method, metadataType, funcName, data, headers).done(function (obj, response) {
+            executeMethod(this, methodType, metadataType, funcName, data, headers).done(function (obj, response) {
                 // Process the response and resolve the promise
                 promise.resolve(processRequest(obj, response));
             });
@@ -539,7 +574,7 @@ BRAVO.Core = function () {
         }
 
         // Execute the request
-        response = executeMethod(this, method, metadataType, funcName, data, headers);
+        response = executeMethod(this, methodType, metadataType, funcName, data, headers);
 
         // Process the request and return it
         return processRequest(this, response);
@@ -1047,9 +1082,10 @@ BRAVO.Core = function () {
 
         // Object
         // Takes the following input parameters:
-        // string, string - The host url and end point of the api.
+        // string, string - The host url and end point.
         // string, string, boolean - The host url, end point, and asynchronous request flag
-        // string, string, boolean, object - The host url, end point of the api, asynchronous request flag and the json results object.
+        // string, string, boolean, object - The host url, end point, asynchronous request flag and the json results object.
+        // string, string, boolean, string - The host url, end point, asynchronous request flag and method type of the api.
         Object: function () {
             var obj = new function () { };
 
@@ -1071,20 +1107,26 @@ BRAVO.Core = function () {
             // See if the request url is set
             if (obj.RequestUrl) {
                 // See if a result has been passed
-                if (arguments.length == 4) {
+                if (arguments.length == 4 && typeof (arguments[3]) === "object") {
+                    // Set the response
+                    obj.Response = arguments[3];
+
                     // Update the properties
-                    updateProperties(obj, arguments[3]);
+                    updateProperties(obj, obj.Response.d);
                 }
                 else {
                     // Set the asynchronous flag
                     obj.asyncFl = arguments[2] && typeof (arguments[2]) === "boolean" ? arguments[2] : false;
+
+                    // Determine the method type
+                    var methodType = arguments[3] && typeof (arguments[3] === "string") ? arguments[3] : "GET";
 
                     // See if we are making an asynchronous request
                     if (obj.asyncFl) {
                         var promise = new BRAVO.Core.Promise();
 
                         // Execute the request
-                        executeRequest(obj, obj.RequestUrl).done(function (obj, response) {
+                        executeRequest(obj, obj.RequestUrl, methodType).done(function (obj, response) {
                             // Set the response
                             obj.Response = JSON.parse(response);
 
@@ -1100,7 +1142,7 @@ BRAVO.Core = function () {
                     }
 
                     // Execute the request
-                    obj.Response = JSON.parse(executeRequest(obj, obj.RequestUrl));
+                    obj.Response = JSON.parse(executeRequest(obj, obj.RequestUrl, methodType));
 
                     // Update the properties
                     updateProperties(obj, obj.Response.d);
@@ -1121,6 +1163,34 @@ BRAVO.Core = function () {
                 resolve: function () { this._arguments = arguments; this._resolveFl = true; if (this._callback) { this._callback.apply(this, this._arguments); } }
             };
         },
+
+        // People Manager
+        // hostUrl - The url to the web.
+        // asyncFl - Flag to determine if the requests are asynchronous.
+        PeopleManager: function (hostUrl, asyncFl) {
+            // Create the site
+            return hostUrl ?
+                new BRAVO.Core.Object(hostUrl.indexOf("http") == 0 ? hostUrl : getDomainUrl() + hostUrl, "sp.userprofiles.peoplemanager", asyncFl) :
+                window._spPageContextInfo ? new BRAVO.Core.Object(window._spPageContextInfo.siteAbsoluteUrl, "sp.userprofiles.peoplemanager", asyncFl) : null;
+        },
+
+        // Asynchronous People Manager
+        // hostUrl - The url to the web.
+        PeopleManagerAsync: function (hostUrl) { return new BRAVO.Core.PeopleManager(hostUrl, true); },
+
+        // Profile Loader
+        // hostUrl - The url to the web.
+        // asyncFl - Flag to determine if the requests are asynchronous.
+        ProfileLoader: function (hostUrl, asyncFl) {
+            // Create the site
+            return hostUrl ?
+                new BRAVO.Core.Object(hostUrl.indexOf("http") == 0 ? hostUrl : getDomainUrl() + hostUrl, "sp.userprofiles.profileloader.getprofileloader", asyncFl, "POST") :
+                window._spPageContextInfo ? new BRAVO.Core.Object(window._spPageContextInfo.siteAbsoluteUrl, "sp.userprofiles.profileloader.getprofileloader", asyncFl, "POST") : null;
+        },
+
+        // Asynchronous Profile Loader
+        // hostUrl - The url to the web.
+        ProfileLoaderAsync: function (hostUrl) { return new BRAVO.Core.PeopleManager(hostUrl, true); },
 
         // Site
         // hostUrl - The url to the web.
