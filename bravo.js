@@ -3,14 +3,12 @@
 /*
 * Title: Bravo Core Library
 * Source: https://github.com/bravocg/core
-* Version: v1.4
+* Version: v1.5
 * Author: Gunjan Datta
 * Description: The Bravo core library translates the REST api as an object model.
 * 
 * Copyright © 2015 Bravo Consulting Group, LLC (Bravo). All Rights Reserved.
 * Released under the MIT license.
-*
-* Date: 2016-04-22T08:16Z
 */
 
 // Global variable
@@ -154,6 +152,27 @@ BRAVO.Core = function () {
                     { name: "update", "function": function (data) { return this.executePost(null, null, data, true, "SP.Site", "MERGE"); } }
                 ]
             },
+            // Social User
+            "SP.Social.SocialRestActor": {
+                custom: [
+                    { name: "createPost", "function": function (data) { data = { restCreationData: { __metadata: { type: "SP.Social.SocialRestPostCreationData" }, ID: null, creationData: data } }; data.restCreationData.creationData.__metadata = { type: "SP.Social.SocialPostCreationData" }; return this.executePost("feed/post", null, data, true); } },
+                    { name: "getFeed", "function": function () { return this.executeGet("feed"); } },
+                ]
+            },
+            // Social Feed Manager
+            "SP.Social.SocialRestFeedManager": {
+                custom: [
+                    { name: "createPost", "function": function (data) { data = { restCreationData: { __metadata: { type: "SP.Social.SocialRestPostCreationData" }, ID: null, creationData: data } }; data.restCreationData.creationData.__metadata = { type: "SP.Social.SocialPostCreationData" }; return this.executePost("my/feed/post", null, data, true); } },
+                    { name: "getMyFeed", "function": function () { return this.executeGet("my/feed"); } },
+                    { name: "getMyInfo", "function": function () { return this.executeGet("my"); } },
+                    { name: "getMyLikes", "function": function () { return this.executeGet("my/likes"); } },
+                    { name: "getMyMentionFeed", "function": function () { return this.executeGet("my/mentionfeed"); } },
+                    { name: "getMyNews", "function": function () { return this.executeGet("my/news"); } },
+                    { name: "getMyTimeLineFeed", "function": function () { return this.executeGet("my/timelinefeed"); } },
+                    { name: "getMyUnreadMentionCount", "function": function () { return this.executeGet("my/unreadmentioncount"); } },
+                    { name: "getUser", "function": function (user) { return user.indexOf('i:0#.f|') == 0 ? this.executeGet("actor", null, user) : this.executeGet("actor", user); } },
+                ]
+            },
             // User Custom Action
             "SP.UserCustomAction": {
                 post: ["deleteObject"]
@@ -173,7 +192,10 @@ BRAVO.Core = function () {
             },
             // User Profile
             "SP.UserProfiles.UserProfile": {
-                post: ["createPersonalSiteEnque", "shareAllSocialData"]
+                post: ["createPersonalSiteEnque", "shareAllSocialData"],
+                custom: [
+                    { name: "getOneDriveUrl", "function": function () { return this.FollowPersonalSiteUrl + "_layouts/15/onedrive.aspx" } }
+                ]
             },
             // View
             "SP.View": {
@@ -478,7 +500,7 @@ BRAVO.Core = function () {
         if (bufferFl) { return executeMethod(this, "GET", metadataType, funcName, data, null, bufferFl); }
 
         // Update the function name
-        funcName = updateFunctionName(funcName, args, data);
+        funcName = updateFunctionName(this, funcName, args, data);
 
         // Update the url
         var url = this.TargetEndPoint + (endPoint ? "." + endPoint : "") + (funcName ? "/" + funcName : "");
@@ -507,8 +529,15 @@ BRAVO.Core = function () {
         // Update the end point
         if (funcName && funcName.indexOf("_api/") == 0) {
             endPoint = funcName.substr(5);
-        } else {
-            endPoint = obj.TargetEndPoint + (funcName ? "/" + funcName : "");
+        }
+        else {
+            // See if the end point contains a query string
+            var idx = obj.TargetEndPoint.indexOf('?');
+            var qs = idx > 0 ? obj.TargetEndPoint.substr(idx) : "";
+            var url = idx > 0 ? obj.TargetEndPoint.substr(0, idx) : obj.TargetEndPoint;
+
+            // Set the end point
+            endPoint = url + (funcName ? "/" + funcName : "") + qs;
         }
 
         // Set the url
@@ -538,7 +567,7 @@ BRAVO.Core = function () {
         }
 
         // Update the function name
-        funcName = updateFunctionName(funcName, args, sendDataInBodyFl ? null : data);
+        funcName = updateFunctionName(this, funcName, args, sendDataInBodyFl ? null : data);
 
         // Update the end point
         if (endPoint) { this.TargetEndPoint += "." + endPoint; }
@@ -935,10 +964,11 @@ BRAVO.Core = function () {
 
     // Update Function Name
     // This method will add the arguments or data object to the function name
-    // funcName - The function name.
+    // obj - The current object.
+    // functionName - The function name.
     // args - The function parameters passed in the function call.
     // data - The function parameters passed as a data object.
-    var updateFunctionName = function (functionName, args, data) {
+    var updateFunctionName = function (obj, functionName, args, data) {
         // Ensure the function name exists
         if (functionName) {
             var encodeUri = functionName.indexOf("?$filter") > 0;
@@ -983,7 +1013,7 @@ BRAVO.Core = function () {
                 data = typeof (data) === "string" ? "'" + encodeURIComponent(data) + "'" : JSON.stringify(data);
 
                 // Append the data to the function
-                functionName += "(@v)?@v=" + data;
+                functionName += "(" + (obj.__metadata.type.indexOf("SP.Social.") == 0 ? "item=" : "") + "@v)?@v=" + data;
             }
         }
 
@@ -1002,7 +1032,7 @@ BRAVO.Core = function () {
             var addResultArrayFl = false;
 
             // See if this is a query
-            if (obj.TargetEndPoint.indexOf("?$filter") && data.results) {
+            if (obj.TargetEndPoint && obj.TargetEndPoint.indexOf("?$filter") && data.results) {
                 // Update exists flag
                 obj.exists = data.results.length > 0;
 
@@ -1022,15 +1052,18 @@ BRAVO.Core = function () {
 
             // Parse the properties of the object
             for (var propName in data) {
+                // Ensure the property has a value
+                if (data[propName] == null) { obj[propName] = data[propName]; continue; }
+
                 // See if this is a method
-                if (data[propName] && data[propName].__deferred && data[propName].__deferred.uri) {
+                if (data[propName].__deferred && data[propName].__deferred.uri) {
                     var uriInfo = getUriInfo(obj, data[propName].__deferred.uri);
 
                     // Generate the method
                     obj["get_" + propName] = new Function("return new BRAVO.Core.Object(\"" + uriInfo.url + "\", \"" + uriInfo.endPoint + "\", this.asyncFl);");
                 }
                     // Else, see if this is a collection
-                else if (propName == "results" && data[propName] && data[propName] instanceof Array) {
+                else if (propName == "results" && data[propName] instanceof Array) {
                     // Initialize the property
                     obj[propName] = [];
 
@@ -1055,11 +1088,8 @@ BRAVO.Core = function () {
                         obj[propName].push(result.Response.error ? data[propName][i] : result);
                     }
                 }
-                    // Else, this is a property
-                else {
-                    // Add the property
-                    obj[propName] = data[propName];
-                }
+                    // Else, add the property
+                else { obj[propName] = data[propName]; }
             }
 
             // See if we are adding the results array
@@ -1190,7 +1220,21 @@ BRAVO.Core = function () {
 
         // Asynchronous Profile Loader
         // hostUrl - The url to the web.
-        ProfileLoaderAsync: function (hostUrl) { return new BRAVO.Core.PeopleManager(hostUrl, true); },
+        ProfileLoaderAsync: function (hostUrl) { return new BRAVO.Core.ProfileLoader(hostUrl, true); },
+
+        // Social Manager
+        // hostUrl - The url to the web.
+        // asyncFl - Flag to determine if the requests are asynchronous.
+        SocialManager: function (hostUrl, asyncFl) {
+            // Create the site
+            return hostUrl ?
+                new BRAVO.Core.Object(hostUrl.indexOf("http") == 0 ? hostUrl : getDomainUrl() + hostUrl, "social.feed", asyncFl) :
+                window._spPageContextInfo ? new BRAVO.Core.Object(window._spPageContextInfo.siteAbsoluteUrl, "social.feed", asyncFl) : null;
+        },
+
+        // Asynchronous Social Manager
+        // hostUrl - The url to the web.
+        SocialManagerAsync: function (hostUrl) { return new BRAVO.Core.SocialManager(hostUrl, true); },
 
         // Site
         // hostUrl - The url to the web.
@@ -1898,8 +1942,8 @@ BRAVO.ModalDialog = function () {
     };
 }();
 
-// Ensure the core js files are loaded
-SP.SOD.loadMultiple(["strings.js", "sp.ui.dialog.js"], function () {
+// Ensure the dialog class is loaded
+SP.SOD.executeFunc("sp.ui.dialog.js", "SP.UI.ModalDialog", function () {
     // Notify scripts that this class is loaded
     SP.SOD.notifyScriptLoadedAndExecuteWaitingJobs("bravo.modaldialog.js");
 });
