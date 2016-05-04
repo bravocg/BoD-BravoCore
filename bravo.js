@@ -3,7 +3,7 @@
 /*
 * Title: Bravo Core Library
 * Source: https://github.com/bravocg/core
-* Version: v1.5.1
+* Version: v1.5.2
 * Author: Gunjan Datta
 * Description: The Bravo core library translates the REST api as an object model.
 * 
@@ -179,6 +179,17 @@ BRAVO.Core = function () {
                     { name: "replyToPost", "function": function (id, data) { data = { restCreationData: { __metadata: { type: "SP.Social.SocialRestPostCreationData" }, ID: id, creationData: data } }; data.restCreationData.creationData.__metadata = { type: "SP.Social.SocialPostCreationData" }; return this.executePost("post/reply", null, data, true); } },
                     { name: "unlikePost", "function": function (id) { return this.executePost("post/unlike", null, { ID: id }, true); } },
                     { name: "unlockPost", "function": function (id) { return this.executePost("post/unlock", null, { ID: id }, true); } },
+                ]
+            },
+            // Social Thread
+            "SP.Social.SocialRestThread": {
+                custom: [
+                    { name: "delete", "function": function (id) { return this.executePost("delete", null, { ID: id || this.ID }, true); } },
+                    { name: "like", "function": function (id) { return this.executePost("like", null, { ID: id || this.ID }, true); } },
+                    { name: "lock", "function": function (id) { return this.executePost("lock", null, { ID: id || this.ID }, true); } },
+                    { name: "reply", "function": function (data, id) { data = { restCreationData: { __metadata: { type: "SP.Social.SocialRestPostCreationData" }, ID: id || this.ID, creationData: data } }; data.restCreationData.creationData.__metadata = { type: "SP.Social.SocialPostCreationData" }; return this.executePost("reply", null, data, true); } },
+                    { name: "unlike", "function": function (id) { return this.executePost("unlike", null, { ID: id || this.ID }, true); } },
+                    { name: "unlock", "function": function (id) { return this.executePost("unlock", null, { ID: id || this.ID }, true); } },
                 ]
             },
             // User Custom Action
@@ -931,7 +942,7 @@ BRAVO.Core = function () {
 
         // Return the object
         return obj;
-    }
+    };
 
     // Set Property
     // This method will update the property of the current object.
