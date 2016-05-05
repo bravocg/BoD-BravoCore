@@ -3,7 +3,7 @@
 /*
 * Title: Bravo Core Library
 * Source: https://github.com/bravocg/core
-* Version: v1.5.3
+* Version: v1.6
 * Author: Gunjan Datta
 * Description: The Bravo core library translates the REST api as an object model.
 * 
@@ -140,7 +140,8 @@ BRAVO.Core = function () {
             // Search Service
             "Microsoft.Office.Server.Search.REST.SearchService": {
                 custom: [
-                    { name: "query", "function": function (queryText) { if (typeof (queryText) === "string") { return this.executeGet("query?" + queryText); } queryText = { request: queryText }; queryText.request.__metadata = { type: "Microsoft.Office.Server.Search.REST.SearchRequest" }; return this.executePost("postquery", null, queryText, true); } },
+                    { name: "query", "function": function (query) { if (typeof (query) === "string") { return this.executeGet("query?" + query); } query = { request: query }; query.request.__metadata = { type: "Microsoft.Office.Server.Search.REST.SearchRequest" }; return this.executePost("postquery", null, query, true); } },
+                    { name: "querySuggestion", "function": function (query) { return this.executeGet("suggest?" + query); } },
                 ]
             },
             // Site
