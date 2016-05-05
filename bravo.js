@@ -1072,6 +1072,7 @@ BRAVO.Core = function () {
                 if (data.results.length == 1) {
                     // Set the flag to add the result array
                     addResultArrayFl = true;
+
                     // Set the data to the result
                     data = data.results[0];
 
@@ -1094,32 +1095,32 @@ BRAVO.Core = function () {
                     // Generate the method
                     obj["get_" + propName] = new Function("return new BRAVO.Core.Object(\"" + uriInfo.url + "\", \"" + uriInfo.endPoint + "\", this.asyncFl);");
                 }
-                    // Else, see if this is a collection
-                else if (propName == "results" && data[propName] instanceof Array) {
-                    // Initialize the property
-                    obj[propName] = [];
+                //    // Else, see if this is a collection
+                //else if (propName == "results" && data[propName] instanceof Array) {
+                //    // Initialize the property
+                //    obj[propName] = [];
 
-                    // Parse the results
-                    for (var i = 0; i < data[propName].length; i++) {
-                        var uriInfo = getUriInfo(obj, data[propName][i].__metadata.uri);
+                //    // Parse the results
+                //    for (var i = 0; i < data[propName].length; i++) {
+                //        var uriInfo = getUriInfo(obj, data[propName][i].__metadata.uri);
 
-                        // Get the result
-                        var result = new BRAVO.Core.Object(uriInfo.url, uriInfo.endPoint);
-                        if (result.Response.error == null) {
-                            // Compare the properties
-                            for (var prop in data[propName][i]) {
-                                // Ensure this property exists
-                                if (result[prop] == null) {
-                                    // Copy the property
-                                    result[prop] = data[propName][i][prop];
-                                }
-                            }
-                        }
+                //        // Get the result
+                //        var result = new BRAVO.Core.Object(uriInfo.url, uriInfo.endPoint);
+                //        if (result.Response.error == null) {
+                //            // Compare the properties
+                //            for (var prop in data[propName][i]) {
+                //                // Ensure this property exists
+                //                if (result[prop] == null) {
+                //                    // Copy the property
+                //                    result[prop] = data[propName][i][prop];
+                //                }
+                //            }
+                //        }
 
-                        // Add the result
-                        obj[propName].push(result.Response.error ? data[propName][i] : result);
-                    }
-                }
+                //        // Add the result
+                //        obj[propName].push(result.Response.error ? data[propName][i] : result);
+                //    }
+                //}
                     // Else, add the property
                 else { obj[propName] = data[propName]; }
             }
