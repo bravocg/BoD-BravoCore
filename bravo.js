@@ -3,7 +3,7 @@
 /*
 * Title: Bravo Core Library
 * Source: https://github.com/bravocg/core
-* Version: v1.5.2
+* Version: v1.5.3
 * Author: Gunjan Datta
 * Description: The Bravo core library translates the REST api as an object model.
 * 
@@ -136,6 +136,12 @@ BRAVO.Core = function () {
             // Role Definition
             "SP.RoleDefinition": {
                 post: ["deleteObject"]
+            },
+            // Search Service
+            "Microsoft.Office.Server.Search.REST.SearchService": {
+                custom: [
+                    { name: "query", "function": function (queryText) { if (typeof (queryText) === "string") { return this.executeGet("query?" + queryText); } queryText = { request: queryText }; queryText.request.__metadata = { type: "Microsoft.Office.Server.Search.REST.SearchRequest" }; return this.executePost("postquery", null, queryText, true); } },
+                ]
             },
             // Site
             "SP.Site": {
@@ -595,12 +601,18 @@ BRAVO.Core = function () {
         var processRequest = function (obj, response) {
             // Parse the response
             response = response ? JSON.parse(response) : response;
-            if (response.d && response.d.__metadata) {
-                // Set the global variables
-                var uriInfo = getUriInfo(obj, response.d.__metadata.uri);
+            if (response.d) {
+                // See if the metadata property exists
+                if (response.d.__metadata && response.d.__metadata.uri) {
+                    // Set the global variables
+                    var uriInfo = getUriInfo(obj, response.d.__metadata.uri);
+
+                    // Return the object
+                    return new BRAVO.Core.Object(uriInfo.url, uriInfo.endPoint, obj.asyncFl, response);
+                }
 
                 // Return the object
-                return new BRAVO.Core.Object(uriInfo.url, uriInfo.endPoint, obj.asyncFl, response);
+                return new BRAVO.Core.Object(obj.TargetUrl, obj.TargetEndPoint, obj.asyncFl, response);
             }
 
             // Return the response
@@ -1240,6 +1252,20 @@ BRAVO.Core = function () {
         // Asynchronous Profile Loader
         // hostUrl - The url to the web.
         ProfileLoaderAsync: function (hostUrl) { return new BRAVO.Core.ProfileLoader(hostUrl, true); },
+
+        // Search
+        // hostUrl - The url to the web.
+        // asyncFl - Flag to determine if the requests are asynchronous.
+        Search: function (hostUrl, asyncFl) {
+            // Create the site
+            return hostUrl ?
+                new BRAVO.Core.Object(hostUrl.indexOf("http") == 0 ? hostUrl : getDomainUrl() + hostUrl, "search", asyncFl) :
+                window._spPageContextInfo ? new BRAVO.Core.Object(window._spPageContextInfo.siteAbsoluteUrl, "search", asyncFl) : null;
+        },
+
+        // Asynchronous Search
+        // hostUrl - The url to the web.
+        SearchAsync: function (hostUrl) { return new BRAVO.Core.Search(hostUrl, true); },
 
         // Social Manager
         // hostUrl - The url to the web.
