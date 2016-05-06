@@ -3,7 +3,7 @@
 /*
 * Title: Bravo Core Library
 * Source: https://github.com/bravocg/core
-* Version: v1.6
+* Version: v1.6.1
 * Author: Gunjan Datta
 * Description: The Bravo core library translates the REST api as an object model.
 * 
@@ -506,6 +506,12 @@ BRAVO.Core = function () {
 
             // Generic get by title method
             obj["getByTitle"] = function (title) { return getResult(this, ["Title", "Name", "InternalName", "StaticName"], title); }
+
+            // Parse the results
+            for (var i = 0; i < obj.results.length; i++) {
+                // Update the properties of the object
+                obj.results[i] = updateProperties({}, obj.results[i], obj);
+            }
         }
     };
 
@@ -1055,7 +1061,10 @@ BRAVO.Core = function () {
 
     // Update Properties
     // This method will read a json object and apply the properties/methods to the this object.
-    var updateProperties = function (obj, data) {
+    // obj - This object, to update.
+    // data - The JSON data to parse and copy to the object.
+    // parent - The parent object, used for analyzing a collection.
+    var updateProperties = function (obj, data, parent) {
         // Set the exists flag
         obj.exists = data && data.error == null;
 
@@ -1063,23 +1072,34 @@ BRAVO.Core = function () {
         if (data) {
             var addResultArrayFl = false;
 
-            // See if this is a query
-            if (obj.TargetEndPoint && obj.TargetEndPoint.indexOf("?$filter") && data.results) {
-                // Update exists flag
-                obj.exists = data.results.length > 0;
+            // See if the parent exists
+            if (parent) {
+                // Set the target information
+                obj.TargetEndPoint = data.__metadata && data.__metadata.uri ? data.__metadata.uri.split("/_api/")[1] : parent.targetEndPoint;
+                obj.TargetTemplate = parent.TargetTemplate;
+                obj.TargetUrl = parent.TargetUrl;
+            }
 
-                // See if only 1 result exists
-                if (data.results.length == 1) {
-                    // Set the flag to add the result array
-                    addResultArrayFl = true;
+            // See if this is a collection
+            if (data.results) {
+                // See if this is a query
+                if (obj.TargetEndPoint && obj.TargetEndPoint.indexOf("?$filter")) {
+                    // Update exists flag
+                    obj.exists = data.results.length > 0;
 
-                    // Set the data to the result
-                    data = data.results[0];
+                    // See if only 1 result exists
+                    if (data.results.length == 1) {
+                        // Set the flag to add the result array
+                        addResultArrayFl = true;
 
-                    // Update the target end point and template
-                    var uriInfo = data.__metadata.uri.split("/_api/");
-                    obj.TargetEndPoint = uriInfo[1];
-                    obj.TargetTemplate = obj.TargetTemplate.replace(/&@target/, "?@target");
+                        // Set the data to the result
+                        data = data.results[0];
+
+                        // Update the target end point and template
+                        var uriInfo = data.__metadata.uri.split("/_api/");
+                        obj.TargetEndPoint = uriInfo[1];
+                        obj.TargetTemplate = obj.TargetTemplate.replace(/&@target/, "?@target");
+                    }
                 }
             }
 
@@ -1095,32 +1115,6 @@ BRAVO.Core = function () {
                     // Generate the method
                     obj["get_" + propName] = new Function("return new BRAVO.Core.Object(\"" + uriInfo.url + "\", \"" + uriInfo.endPoint + "\", this.asyncFl);");
                 }
-                //    // Else, see if this is a collection
-                //else if (propName == "results" && data[propName] instanceof Array) {
-                //    // Initialize the property
-                //    obj[propName] = [];
-
-                //    // Parse the results
-                //    for (var i = 0; i < data[propName].length; i++) {
-                //        var uriInfo = getUriInfo(obj, data[propName][i].__metadata.uri);
-
-                //        // Get the result
-                //        var result = new BRAVO.Core.Object(uriInfo.url, uriInfo.endPoint);
-                //        if (result.Response.error == null) {
-                //            // Compare the properties
-                //            for (var prop in data[propName][i]) {
-                //                // Ensure this property exists
-                //                if (result[prop] == null) {
-                //                    // Copy the property
-                //                    result[prop] = data[propName][i][prop];
-                //                }
-                //            }
-                //        }
-
-                //        // Add the result
-                //        obj[propName].push(result.Response.error ? data[propName][i] : result);
-                //    }
-                //}
                     // Else, add the property
                 else { obj[propName] = data[propName]; }
             }
@@ -1131,9 +1125,12 @@ BRAVO.Core = function () {
                 obj.results = obj.results ? obj.results : [obj];
             }
 
-            // Add the methods
-            addMethods(obj);
+            // Add the methods to the root object only
+            if (!parent) { addMethods(obj); }
         }
+
+        // Return the object
+        return obj;
     };
 
     // **********************************************************************************
@@ -1143,7 +1140,7 @@ BRAVO.Core = function () {
         // Get query string value
         getQueryStringValue: getQueryStringValue,
 
-        // Object
+        // Core Object
         // Takes the following input parameters:
         // string, string - The host url and end point.
         // string, string, boolean - The host url, end point, and asynchronous request flag
@@ -1226,6 +1223,29 @@ BRAVO.Core = function () {
                 resolve: function () { this._arguments = arguments; this._resolveFl = true; if (this._callback) { this._callback.apply(this, this._arguments); } }
             };
         },
+
+        // **********************************************************************************
+        // SP Objects
+        // **********************************************************************************
+
+        // List
+        // listName - The name of the list.
+        // hostUrl - The url to the web.
+        // asyncFl - Flag to determine if the requests are asynchronous.
+        List: function (listName, hostUrl, asyncFl) {
+            // Encode the list name
+            listName = encodeURIComponent(listName);
+
+            // Create the site
+            return hostUrl ?
+                new BRAVO.Core.Object(hostUrl.indexOf("http") == 0 ? hostUrl : getDomainUrl() + hostUrl, "web/lists?$filter=Title eq '" + listName + "'", asyncFl) :
+                window._spPageContextInfo ? new BRAVO.Core.Object(window._spPageContextInfo.webAbsoluteUrl, "web/lists?$filter=Title eq '" + listName + "'", asyncFl) : null;
+        },
+
+        // Asynchronous List
+        // listName - The name of the list.
+        // hostUrl - The url to the web.
+        ListAsync: function (listName, hostUrl) { return new BRAVO.Core.List(listName, hostUrl, true); },
 
         // People Manager
         // hostUrl - The url to the web.
