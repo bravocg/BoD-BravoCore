@@ -1119,14 +1119,14 @@ BRAVO.Core = function () {
                 else { obj[propName] = data[propName]; }
             }
 
+            // Add the methods
+            addMethods(obj);
+
             // See if we are adding the results array
             if (addResultArrayFl) {
                 // Retain the 'results' property, so the developer can access it
                 obj.results = obj.results ? obj.results : [obj];
             }
-
-            // Add the methods to the root object only
-            if (!parent) { addMethods(obj); }
         }
 
         // Return the object
