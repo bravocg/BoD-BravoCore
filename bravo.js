@@ -153,7 +153,7 @@ BRAVO.Core = function () {
                 custom: [
                     { name: "addCustomAction", "function": function (data) { return this.executePost("usercustomactions", null, data, true, "SP.UserCustomAction"); } },
                     { name: "getCustomAction", "function": function (title) { title = encodeURIComponent(title); return this.executeGet("usercustomactions?$filter=Name eq '" + title + "' or Title eq '" + title + "'"); } },
-                    { name: "getRootWeb", "function": function () { this._rootWeb = this._rootWeb || new BRAVO.Core.Web(this.ServerRelativeUrl); return this._rootWeb; } },
+                    { name: "getRootWeb", "function": function () { this._rootWeb = this._rootWeb || new BRAVO.Core.Web(this.ServerRelativeUrl, this.asyncFl); return this._rootWeb; } },
                     { name: "hasAccess", "function": function (permissions) { return hasAccess(this, permissions); } },
                     { name: "sendEmail", "function": function (data) { data = { properties: data }; data.properties.__metadata = { type: "SP.Utilities.EmailProperties" }; return this.executePost("_api/SP.Utilities.Utility.SendEmail", null, data, true); } },
                     { name: "update", "function": function (data) { return this.executePost(null, null, data, true, "SP.Site", "MERGE"); } }
@@ -1316,6 +1316,11 @@ BRAVO.Core = function () {
         // Asynchronous Site
         // hostUrl - The url to the web.
         SiteAsync: function (hostUrl) { return new BRAVO.Core.Site(hostUrl, true); },
+
+        Utility: {
+            createEmailBodyForInvitation: function () { "POST" },
+            getCurrentUserEmailAddresses: function () { return new BRAVO.Core.Object(window._spPageContextInfo.siteAbsoluteUrl, "sp.utilities.utility.getCurrentUserEmailAddresses") }
+        },
 
         // Web
         // hostUrl - The url to the web.
