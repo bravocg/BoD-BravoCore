@@ -3,7 +3,7 @@
 /*
 * Title: Bravo Core Library
 * Source: https://github.com/bravocg/core
-* Version: v1.6.1
+* Version: v1.6.2
 * Author: Gunjan Datta
 * Description: The Bravo core library translates the REST api as an object model.
 * 
@@ -1338,9 +1338,11 @@ BRAVO.Core = function () {
     };
 }();
 
-// Notify scripts that this class is loaded
-SP.SOD.notifyScriptLoadedAndExecuteWaitingJobs("bravo.js");
-
+// Ensure the sp class is loaded 
+SP.SOD.executeFunc("sp.js", "SP.ClientContext", function () {
+    // Notify scripts that this class is loaded
+    SP.SOD.notifyScriptLoadedAndExecuteWaitingJobs("bravo.js");
+});
 // The BRAVO JSLink class
 BRAVO.JSLink = function () {
     // **********************************************************************************
