@@ -3,7 +3,7 @@
 /*
 * Title: Bravo Core Library
 * Source: https://github.com/bravocg/core
-* Version: v1.6.2
+* Version: v1.6.3
 * Author: Gunjan Datta
 * Description: The Bravo core library translates the REST api as an object model.
 * 
@@ -19,6 +19,11 @@ var BRAVO = BRAVO || {};
 // This class converts the REST api as an object model.
 // **********************************************************************************
 BRAVO.Core = function () {
+    // **********************************************************************************
+    // Global Variables
+    // **********************************************************************************
+    var _dependenciesLoadedFl = null;
+
     // **********************************************************************************
     // REST Methods
     // **********************************************************************************
@@ -675,8 +680,8 @@ BRAVO.Core = function () {
 
                 // Set the state change event
                 xhr.onreadystatechange = function () {
-                    // Ensure the request was successful
-                    if (xhr.readyState == 4 && xhr.status == "200") {
+                    // See if the request has finished
+                    if (xhr.readyState == 4) {
                         // Resolve the promise
                         promise.resolve(obj, xhr.response);
                     }
@@ -921,6 +926,66 @@ BRAVO.Core = function () {
         return hasPermissionFl ? true : false;
     };
 
+    // Method to load the dependencies
+    // callback - The method to execute, after the dependencies are loaded.
+    var loadDependencies = function (callback) {
+        // See if the page context exists
+        if (window._spPageContextInfo) {
+            // Execute the callback function and return
+            if (callback && typeof (callback) === "function") { callback(); }
+            return;
+        }
+
+        // Wait for the window to be loaded
+        window.addEventListener("load", function () {
+            // See if the page context exists
+            if (window._spPageContextInfo) {
+                // Execute the callback function and return
+                if (callback && typeof (callback) === "function") { callback(); }
+                return;
+            }
+
+            // Ensure the dependencies have been loaded
+            if (!_dependenciesLoadedFl) {
+                // Set the flag
+                _dependenciesLoadedFl = true;
+
+                // Parse the scripts to load
+                ["MicrosoftAjax.js", "init.js", "sp.runtime.js", "sp.js", "sp.core.js", "core.js"].every(function (fileName) {
+                    // Create the script element
+                    var el = document.createElement("script");
+
+                    // Set the properties
+                    el.setAttribute("src", "/_layouts/15/" + fileName);
+                    el.setAttribute("type", "text/javascript");
+
+                    // Add it to the head
+                    document.head.appendChild(el);
+                });
+            }
+
+            // Keep looping until the page context exists
+            var counter = 0;
+            var maxLoops = 400;
+            var intervalId = window.setInterval(function () {
+                // Wait for the page context to exist
+                if (window._spPageContextInfo) {
+                    // Stop the loop
+                    window.clearInterval(intervalId);
+
+                    // Execute the callback function
+                    if (callback && typeof(callback) === "function") { callback(); }
+                }
+
+                // See if we have hit the maximum # of tries
+                if (++counter >= maxLoops) {
+                    // Stop the loop
+                    window.clearInterval(intervalId);
+                }
+            }, 25);
+        });
+    };
+
     // Refresh
     // This method will execute the same request
     var refresh = function () {
@@ -1140,6 +1205,9 @@ BRAVO.Core = function () {
         // Get query string value
         getQueryStringValue: getQueryStringValue,
 
+        // Load the dependencies
+        loadDependencies: loadDependencies,
+
         // Core Object
         // Takes the following input parameters:
         // string, string - The host url and end point.
@@ -1338,11 +1406,12 @@ BRAVO.Core = function () {
     };
 }();
 
-// Ensure the sp class is loaded 
-SP.SOD.executeFunc("sp.js", "SP.ClientContext", function () {
+// Ensure the dependencies are loaded
+BRAVO.Core.loadDependencies(function () {
     // Notify scripts that this class is loaded
     SP.SOD.notifyScriptLoadedAndExecuteWaitingJobs("bravo.js");
 });
+
 // The BRAVO JSLink class
 BRAVO.JSLink = function () {
     // **********************************************************************************
@@ -1867,8 +1936,11 @@ BRAVO.JSLink = function () {
     };
 }();
 
-// Notify scripts that this class is loaded
-SP.SOD.notifyScriptLoadedAndExecuteWaitingJobs("bravo.jslink.js");
+// Ensure the dependencies are loaded
+BRAVO.Core.loadDependencies(function () {
+    // Notify scripts that this class is loaded
+    SP.SOD.notifyScriptLoadedAndExecuteWaitingJobs("bravo.jslink.js");
+});
 
 // The modal dialog class.
 BRAVO.ModalDialog = function () {
@@ -2016,8 +2088,11 @@ BRAVO.ModalDialog = function () {
     };
 }();
 
-// Ensure the dialog class is loaded
-SP.SOD.executeFunc("sp.ui.dialog.js", "SP.UI.ModalDialog", function () {
-    // Notify scripts that this class is loaded
-    SP.SOD.notifyScriptLoadedAndExecuteWaitingJobs("bravo.modaldialog.js");
+// Ensure the dependencies are loaded
+BRAVO.Core.loadDependencies(function () {
+    // Ensure the dialog class is loaded
+    SP.SOD.executeFunc("sp.ui.dialog.js", "SP.UI.ModalDialog", function () {
+        // Notify scripts that this class is loaded
+        SP.SOD.notifyScriptLoadedAndExecuteWaitingJobs("bravo.modaldialog.js");
+    });
 });
