@@ -3,7 +3,7 @@
 /*
 * Title: Bravo Core Library
 * Source: https://github.com/bravocg/core
-* Version: v1.6.3
+* Version: v1.6.4
 * Author: Gunjan Datta
 * Description: The Bravo core library translates the REST api as an object model.
 * 
@@ -390,6 +390,7 @@ BRAVO.Core = function () {
     // Add Methods
     // This method will add functions based on the type of object.
     var addMethods = function (obj) {
+        var metadataType = null;
         var methods = null;
         var restMethods = _restMethods();
 
@@ -410,7 +411,7 @@ BRAVO.Core = function () {
 
         // See if the metadata exists
         if (obj.__metadata) {
-            var metadataType = obj.__metadata.type;
+            metadataType = obj.__metadata.type;
 
             // See if this is a field
             if (/^SP\.Field/.test(metadataType)) {
@@ -518,6 +519,13 @@ BRAVO.Core = function () {
                 obj.results[i] = updateProperties({}, obj.results[i], obj);
             }
         }
+
+        // Update the target end point, based on the metadata type
+        switch (metadataType) {
+            case "SP.Field":
+                obj.TargetEndPoint = obj.TargetEndPoint.replace("AvailableFields", "Fields");
+                break;
+        };
     };
 
     // Execute Get
@@ -1140,6 +1148,7 @@ BRAVO.Core = function () {
             // See if the parent exists
             if (parent) {
                 // Set the target information
+                obj.asyncFl = parent.asyncFl;
                 obj.TargetEndPoint = data.__metadata && data.__metadata.uri ? data.__metadata.uri.split("/_api/")[1] : parent.targetEndPoint;
                 obj.TargetTemplate = parent.TargetTemplate;
                 obj.TargetUrl = parent.TargetUrl;
