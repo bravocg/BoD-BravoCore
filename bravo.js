@@ -3,7 +3,7 @@
 /*
 * Title: Bravo Core Library
 * Source: https://github.com/bravocg/core
-* Version: v1.6.4
+* Version: v1.6.5
 * Author: Gunjan Datta
 * Description: The Bravo core library translates the REST api as an object model.
 * 
@@ -273,7 +273,7 @@ BRAVO.Core = function () {
                     { name: "getFieldByTitle", "function": function (title) { title = encodeURIComponent(title); return this.executeGet("fields?$filter=Title eq '" + title + "'"); } },
                     { name: "getFile", "function": function (name) { name = encodeURIComponent(name); return this.executeGet("rootfolder/files?$filter=Name eq '" + name + "'"); } },
                     { name: "getListById", "function": function (id) { return this.executeGet("lists/getById", id); } },
-                    { name: "getListByTitle", "function": function (title) { title = encodeURIComponent(title); return this.executeGet("lists?$filter=Title eq '" + title + "'"); } },
+                    { name: "getListByTitle", "function": function (title) { return this.executeGet("lists/getByTitle", title); } },
                     { name: "getSiteGroupById", "function": function (id) { return this.executeGet("sitegroups/getById", id); } },
                     { name: "getSiteGroupByName", "function": function (name) { return this.executeGet("sitegroups/getByName", name); } },
                     { name: "getSubFolder", "function": function (name) { name = encodeURIComponent(name); return this.executeGet("rootfolder/folders?$filter=Name eq '" + name + "'"); } },
@@ -819,7 +819,7 @@ BRAVO.Core = function () {
                 }
 
                 // See if this is the result we are looking for
-                if (propertyValue == value) { return result; }
+                if (propertyValue != null && propertyValue.toLowerCase() == value.toLowerCase()) { return result; }
             }
         }
 
@@ -1243,6 +1243,9 @@ BRAVO.Core = function () {
 
             // See if the request url is set
             if (obj.RequestUrl) {
+                // Set the asynchronous flag
+                obj.asyncFl = arguments[2] && typeof (arguments[2]) === "boolean" ? arguments[2] : false;
+
                 // See if a result has been passed
                 if (arguments.length == 4 && typeof (arguments[3]) === "object") {
                     // Set the response
@@ -1252,9 +1255,6 @@ BRAVO.Core = function () {
                     updateProperties(obj, obj.Response.d);
                 }
                 else {
-                    // Set the asynchronous flag
-                    obj.asyncFl = arguments[2] && typeof (arguments[2]) === "boolean" ? arguments[2] : false;
-
                     // Determine the method type
                     var methodType = arguments[3] && typeof (arguments[3] === "string") ? arguments[3] : "GET";
 
@@ -1415,13 +1415,693 @@ BRAVO.Core = function () {
     };
 }();
 
-// Ensure the dependencies are loaded
-BRAVO.Core.loadDependencies(function () {
-    // Notify scripts that this class is loaded
-    SP.SOD.notifyScriptLoadedAndExecuteWaitingJobs("bravo.js");
-});
+// The help interface
+// objectType - [Required] The object type to get help for.
+// methodName - [Optional] The method name to get help for.
+BRAVO.Help = function (objectType, methodName) {
 
-// The BRAVO JSLink class
+    // **********************************************************************************
+    // Private Variables
+    // **********************************************************************************
+
+    var _line = "************************************************************************";
+    var _lineDashes = "------------------------------------------------------------------------";
+    var _methodType = { Get: 0, Post: 1 };
+
+    // **********************************************************************************
+    // Object Help Information
+    // **********************************************************************************
+    var _objInfo = {
+
+        // **********************************************************************************
+        // By Metadata Type
+        // **********************************************************************************
+
+        // Content Type
+        "contenttype": {
+            properties: {
+                description: {
+                    description: "The description of the content type.",
+                    name: "Description",
+                    readOnly: false
+                },
+                displayformtemplatename: {
+                    description: "The name of a custom display form template to use for list items that have been assigned the content type.",
+                    name: "DisplayFormTemplateName",
+                    readOnly: false
+                },
+                displayformurl: {
+                    description: "The URL of a custom display form to use for list items that have been assigned the content type.",
+                    name: "DisplayFormUrl",
+                    readOnly: false
+                },
+                documenttemplate: {
+                    description: "The document template used for a new list item that has been assigned the content type.",
+                    name: "DocumentTemplate",
+                    readOnly: false
+                },
+                documenttemplateurl: {
+                    description: "The URL of the document template assigned to the content type.",
+                    name: "DocumentTemplateUrl",
+                    readOnly: true
+                },
+                editformtemplatename: {
+                    description: "The name of a custom edit form template to use for list items that have been assigned the content type.",
+                    name: "EditFormTemplateName",
+                    readOnly: false
+                },
+                editformurl: {
+                    description: "The URL of a custom edit form to use for list items that have been assigned the content type.",
+                    name: "EditFormUrl",
+                    readOnly: false
+                },
+                fieldlinks: {
+                    description: "The field references associated with this content type.",
+                    name: "FieldLinks",
+                    methodName: "get_fieldLinks"
+                },
+                fields: {
+                    description: "The fields associated with this content type.",
+                    name: "Fields",
+                    methodName: "get_fields"
+                },
+                group: {
+                    description: "The content type group for the content type.",
+                    name: "Group",
+                    readOnly: false
+                },
+                hidden: {
+                    description: "The value that specifies whether the content type is unavailable for creation or usage directly from a user interface.",
+                    name: "Hidden",
+                    readOnly: false
+                },
+                id: {
+                    description: "The unique identifer.",
+                    name: "Id",
+                    readOnly: true
+                },
+                jslink: {
+                    description: "The JSLink for the content type custom form template.",
+                    name: "JSLink",
+                    readOnly: false,
+                },
+                name: {
+                    description: "The name of the content type.",
+                    name: "Name",
+                    readOnly: false
+                },
+                newformtemplatename: {
+                    description: "The name of a custom new form template to use for list items that have been assigned the content type.",
+                    name: "NewFormTemplateName",
+                    readOnly: false
+                },
+                newformurl: {
+                    description: "The URL of a custom new form to use for list items that have been assigned the content type.",
+                    name: "NewFormUrl",
+                    readOnly: false
+                },
+                parent: {
+                    description: "The parent content type of the content type.",
+                    name: "Parent",
+                    readOnly: true
+                },
+                readonly: {
+                    description: "The value that specifies whether changes to the content type properties are denied.",
+                    name: "ReadOnly",
+                    readOnly: false
+                },
+                schemaxml: {
+                    description: "The value that specifies the XML Schema representing the content type.",
+                    name: "SchemaXml",
+                    readOnly: true
+                },
+                schemaxmlwithresourcetokens: {
+                    description: "The non-localized version of the XML schema that defines the content type.",
+                    name: "SchemaXmlWithResourceTokens",
+                    readOnly: true
+                },
+                scope: {
+                    description: "The value that specifies a server-relative path to the content type scope of the content type.",
+                    name: "Scope",
+                    readOnly: true
+                },
+                sealed: {
+                    description: "The value that specifies whether the content type can be modified.",
+                    name: "Sealed",
+                    readOnly: false
+                },
+                stringid: {
+                    description: "The string representation of the value of the Id.",
+                    name: "StringId",
+                    readOnly: true
+                },
+                workflowassociations: {
+                    description: "The value that specifies the collection of workflow associations for the content type.",
+                    name: "WorkflowAssociations",
+                    readOnly: true
+                }
+            },
+            methods: {
+                addfieldlink: {
+                    name: "addFieldLink",
+                    description: "This method will add a field link to the collection.",
+                    parameters: {
+                        body: [
+                            {
+                                name: "FieldInternalName",
+                                description: "The internal field name property.",
+                                sampleValue: "'Title'"
+                            },
+                            {
+                                name: "Hidden",
+                                description: "Specifies whether the field is displayed in forms.",
+                                sampleValue: "false"
+                            },
+                            {
+                                name: "Required",
+                                description: "Specifies whether the field requires a value.",
+                                sampleValue: "true"
+                            }
+                        ]
+                    },
+                    type: _methodType.Post
+                },
+                deleteobject: {
+                    name: "deleteObject",
+                    description: "The method will delete the content type.",
+                    type: _methodType.Post
+                },
+                getfieldbyinternalname: {
+                    name: "getFieldByInternalName",
+                    description: "This method will return a SP.Field object, by the internal name property.",
+                    parameters: {
+                        name: "internalName",
+                        description: "A string value, representing the internal name of the field.",
+                        sampleValue: "'Title'"
+                    },
+                    type: _methodType.Get
+                },
+                getfieldbystaticname: {
+                    name: "getFieldByStaticName",
+                    description: "This method will return a SP.Field object, by static name property.",
+                    parameters: {
+                        name: "staticName",
+                        description: "A string value, representing the internal name of the field.",
+                        sampleValue: "'Title'"
+                    },
+                    type: _methodType.Get
+                },
+                getfieldbytitle: {
+                    name: "getFieldByTitle",
+                    description: "This method will return a SP.Field object, by title property.",
+                    parameters: {
+                        name: "title",
+                        description: "A string value, representing the internal name of the field.",
+                        sampleValue: "'Title'"
+                    },
+                    type: _methodType.Get
+                },
+                getfieldlinkbyname: {
+                    name: "getFieldLinkByName",
+                    description: "This method will return a SP.FieldLink link object, by the name property.",
+                    parameters: {
+                        name: "name",
+                        description: "A string value, representing the internal name of the field.",
+                        sampleValue: "'Title'"
+                    },
+                    type: _methodType.Get
+                },
+                update: {
+                    name: "update",
+                    description: "This method will update the content type properties.",
+                    type: _methodType.Post
+                }
+            }
+        },
+        // Content Types
+        "contenttypes": {
+            properties: {},
+            methods: {}
+        },
+        // Field
+        "field": {
+            properties: {},
+            methods: {}
+        },
+        // Fields
+        "fields": {
+            properties: {},
+            methods: {}
+        },
+        // Field Link
+        "fieldlink": {
+            properties: {},
+            methods: {}
+        },
+        // Field Links
+        "fieldlinks": {
+            properties: {},
+            methods: {}
+        },
+        // File
+        "file": {
+            properties: {},
+            methods: {}
+        },
+        // Files
+        "files": {
+            properties: {},
+            methods: {}
+        },
+        // File Version
+        "fileversion": {
+            properties: {},
+            methods: {}
+        },
+        // File Versions
+        "fileversions": {
+            properties: {},
+            methods: {}
+        },
+        // Folder
+        "folder": {
+            properties: {},
+            methods: {}
+        },
+        // Folders
+        "folders": {
+            properties: {},
+            methods: {}
+        },
+        // Group
+        "group": {
+            properties: {},
+            methods: {}
+        },
+        // Groups
+        "groups": {
+            properties: {},
+            methods: {}
+        },
+        // Item
+        "item": {
+            properties: {},
+            methods: {}
+        },
+        // Items
+        "items": {
+            properties: {},
+            methods: {}
+        },
+        // Limited Web Part Manager
+        "limitedwebpartmanager": {
+            properties: {},
+            methods: {}
+        },
+        // List
+        "list": {
+            properties: {},
+            methods: {}
+        },
+        // Lists
+        "lists": {
+            properties: {},
+            methods: {}
+        },
+        // Role Assignment
+        "roleassignment": {
+            properties: {},
+            methods: {}
+        },
+        // Role Assignments
+        "roleassignments": {
+            properties: {},
+            methods: {}
+        },
+        // Role Definition
+        "roledefinition": {
+            properties: {},
+            methods: {}
+        },
+        // Role Definitions
+        "roledefinitions": {
+            properties: {},
+            methods: {}
+        },
+        // Search Service
+        "searchservice": {
+            properties: {},
+            methods: {}
+        },
+        // Site
+        "site": {
+            properties: {},
+            methods: {}
+        },
+        // Social User
+        "socialrestactor": {
+            properties: {},
+            methods: {}
+        },
+        // Social Feed Manager
+        "socialrestfeedmanager": {
+            properties: {},
+            methods: {}
+        },
+        // Social Thread
+        "socialrestthread": {
+            properties: {},
+            methods: {}
+        },
+        // User Custom Action
+        "usercustomaction": {
+            properties: {},
+            methods: {}
+        },
+        // People Manager
+        "peoplemanager": {
+            properties: {},
+            methods: {}
+        },
+        // Profile Loader
+        "profileloader": {
+            properties: {},
+            methods: {}
+        },
+        // Custom Actions
+        "usercustomactions": {
+            properties: {},
+            methods: {}
+        },
+        // User Profile
+        "userprofile": {
+            properties: {},
+            methods: {}
+        },
+        // Users
+        "users": {
+            properties: {},
+            methods: {}
+        },
+        // View
+        "view": {
+            properties: {},
+            methods: {}
+        },
+        // Views
+        "views": {
+            properties: {},
+            methods: {}
+        },
+        // View Fields
+        "viewfields": {
+            properties: {},
+            methods: {}
+        },
+        // Web
+        "web": {
+            properties: {},
+            methods: {}
+        },
+        // Webs
+        "webs": {
+            properties: {},
+            methods: {}
+        }
+    };
+
+    // **********************************************************************************
+    // Methods
+    // **********************************************************************************
+
+    // Method to generate the header.
+    // header - The header.
+    var generateHeaderInfo = function (header) {
+        var messages = [];
+
+        // Generate the header
+        messages.push(_line);
+        messages.push(header)
+        messages.push(_line);
+
+        // Return the messages;
+        return messages;
+    };
+
+    // Method to generate method parameters
+    // parameters - The method parameters.
+    var generateMethodParameters = function (parameters) {
+        // See if the parameters exist
+        if (parameters && parameters.length > 0) {
+            // Set the starting tag
+            var code = "{";
+
+            // Parse the parameters
+            for (var i = 0; i < parameters.length; i++) {
+                // Append the parameter
+                code += (i == 0 ? "" : ",") + " " + parameters[i].name + ": " + parameters[i].sampleValue;
+            }
+
+            // Add the closing tag
+            code += " }";
+
+            // Return the code
+            return code;
+        }
+
+        // Return nothing
+        return null;
+    };
+
+    // Method to generate the js for the method.
+    // methodInfo - The method information.
+    var getMethodExample = function (methodInfo) {
+        var messages = [];
+
+        // Header
+        messages.push("Code Example:");
+
+        // Generate the code example
+        var code = methodInfo.name + "(";
+
+        // See if parameters are specified
+        if (methodInfo.parameters) {
+            // Generate the parameters
+            var bodyParams = generateMethodParameters(methodInfo.parameters.body);
+            var qsParams = generateMethodParameters(methodInfo.parameters.qs);
+
+            // Generate the method
+            code += (qsParams ? qsParams + ", " : "") + (bodyParams ? bodyParams : "") + (methodInfo.parameters.sampleValue ? methodInfo.parameters.sampleValue : "");
+        }
+
+        // Close the function
+        code += ");";
+
+        // Add the code example
+        messages.push(code);
+
+        // Return the messages
+        return messages;
+    };
+
+    // Method to get the method information
+    // objInfo - The object information.
+    var getMethodInfo = function (objInfo) {
+        // Header
+        var messages = generateHeaderInfo("Method Information");
+
+        // Parse the properties
+        for (var key in objInfo.methods) {
+            var methodInfo = objInfo.methods[key];
+
+            // Add a messages
+            messages.push(_lineDashes);
+            messages.push(methodInfo.name + " [" + (methodInfo.type == _methodType.Get ? "Get" : "Post") + " Request]");
+            messages.push(methodInfo.description);
+            messages = messages.concat(getMethodExample(methodInfo));
+            messages.push(_lineDashes);
+            messages.push("");
+        }
+
+        // Return the messages
+        return messages;
+    };
+
+    // Method to get the property information
+    // objInfo - The object information.
+    var getPropertyInfo = function (objInfo) {
+        // Header
+        var messages = generateHeaderInfo("Property Information");
+
+        // Parse the properties
+        for (var key in objInfo.properties) {
+            var propInfo = objInfo.properties[key];
+
+            // Add a messages
+            messages.push(_lineDashes);
+            messages.push(propInfo.name + " [" + (propInfo.readOnly ? "Read Only" : "Read/Write") + "]");
+            if (propInfo.methodName) { messages.push("Method: " + propInfo.methodName); }
+            messages.push(propInfo.description);
+            messages.push(_lineDashes);
+            messages.push("");
+        }
+
+        // Return the messages
+        return messages;
+    };
+
+    // Method to log the help menu.
+    var logHelpMenu = function () {
+        var messages = [];
+
+        // Log the default help to the console
+        messages.push(_line);
+        messages.push("Welcome to the help interface for the Bravo Core Library");
+        messages.push("Author: Gunjan Datta");
+        messages.push(_line);
+        messages.push("You can interact with help by sending me the following information:");
+        messages.push("");
+        messages.push("'Object Type' - [Required] This is the 'type' property of the object.");
+        messages.push("'Method' - [Optional] The method name of the object.");
+        messages.push("");
+        messages.push("Examples:");
+        messages.push("BRAVO.Help('Web');");
+        messages.push("BRAVO.Help('List', 'addItem');");
+        messages.push("");
+        messages.push("Use BRAVO.Help('All'); to output all available object types.");
+        messages.push("Use BRAVO.Help('[Object Type]', 'Methods'); to output all available methods for a specified object type.");
+        messages.push("Use BRAVO.Help('[Object Type]', 'Properties'); to output all available properties for a specified object type.");
+        messages.push(_line);
+
+        // Write to the log
+        writeToLog(messages);
+    };
+
+    // Method to log the method information.
+    // methodInfo - The method information.
+    var logMethodInfo = function (methodInfo) {
+        // Header
+        var messages = generateHeaderInfo("Method Information");
+
+        // Get method information
+        // Properties: name, description, properties.qs, properties.body, type
+        messages.push("Name: " + methodInfo.name);
+        messages.push("Description: " + methodInfo.description);
+        messages.push(_line);
+        messages = messages.concat(getMethodExample(methodInfo));
+        messages.push("");
+        messages = messages.concat(getMethodExample(methodInfo));
+
+        // Write to the log
+        writeToLog(messages);
+    };
+
+    // Method to log the object information.
+    // objInfo - The object information.
+    var logObjectInfo = function (objInfo) {
+        var messages = [];
+
+        // Get object information
+        messages = messages.concat(getPropertyInfo(objInfo));
+        messages.push("");
+        messages = messages.concat(getMethodInfo(objInfo));
+
+        // Write to the log
+        writeToLog(messages);
+    };
+
+    // Method to log the object types.
+    var logObjectTypes = function () {
+        var messages = [];
+
+        // Header
+        messages.push(_line);
+        messages.push("Object Types");
+        messages.push(_line);
+
+        // Parse the object information
+        for (var key in _objInfo) {
+            // Output the key
+            messages.push(key);
+        }
+
+        // Write to the log
+        writeToLog(messages);
+    };
+
+    // Method to log the messages.
+    // messages - The array of messages to log to the console.
+    var writeToLog = function (messages) {
+        var message = "";
+
+        // Clear the console
+        console.clear();
+
+        // Parse the messages
+        for (var i = 0; i < messages.length; i++) {
+            message += messages[i] + "\r\n";
+        }
+
+        // Log the message
+        console.log(message);
+    }
+
+    // **********************************************************************************
+    // Main
+    // **********************************************************************************
+
+    // Ensure the input parameters are lower case
+    objectType = objectType ? objectType.toLowerCase() : "";
+    methodName = methodName ? methodName.toLowerCase() : "";
+
+    // See if the object type was specified
+    if (objectType) {
+        // See if 'All' object types are being requested
+        if (objectType == "all") {
+            // Log the object types
+            logObjectTypes();
+            return;
+        }
+
+        // Get the object information for the object
+        var objInfo = _objInfo[objectType];
+        if (objInfo) {
+            // See if the method name was specified
+            if (methodName) {
+                // See if only the methods are being requested
+                if (methodName == "methods") {
+                    // Log the method types
+                    writeToLog(getMethodInfo(objInfo));
+                    return;
+                }
+
+                // See if only the properties are being requested
+                if (methodName == "properties") {
+                    // Log the object types
+                    writeToLog(getPropertyInfo(objInfo));
+                    return;
+                }
+
+                // Get the method
+                var methodInfo = _objInfo.methods[methodName];
+                if (methodInfo) {
+                    // Log the method information
+                    logMethodInfo(methodInfo);
+                    return;
+                }
+            }
+
+            // Log the object information
+            logObjectInfo(objInfo);
+            return;
+        }
+    }
+
+    // Log the help menu
+    logHelpMenu();
+};
+
+// The JS Link class
 BRAVO.JSLink = function () {
     // **********************************************************************************
     // Global Variables
@@ -1945,12 +2625,6 @@ BRAVO.JSLink = function () {
     };
 }();
 
-// Ensure the dependencies are loaded
-BRAVO.Core.loadDependencies(function () {
-    // Notify scripts that this class is loaded
-    SP.SOD.notifyScriptLoadedAndExecuteWaitingJobs("bravo.jslink.js");
-});
-
 // The modal dialog class.
 BRAVO.ModalDialog = function () {
     // **********************************************************************************
@@ -2101,7 +2775,16 @@ BRAVO.ModalDialog = function () {
 BRAVO.Core.loadDependencies(function () {
     // Ensure the dialog class is loaded
     SP.SOD.executeFunc("sp.ui.dialog.js", "SP.UI.ModalDialog", function () {
-        // Notify scripts that this class is loaded
+        // Notify scripts that the modal dialog class is loaded
         SP.SOD.notifyScriptLoadedAndExecuteWaitingJobs("bravo.modaldialog.js");
+
+        // Notify scripts that the bravo library is loaded
+        SP.SOD.notifyScriptLoadedAndExecuteWaitingJobs("bravo.js");
     });
+
+    // Notify scripts that the core class is loaded
+    SP.SOD.notifyScriptLoadedAndExecuteWaitingJobs("bravo.core.js");
+
+    // Notify scripts that the js link class is loaded
+    SP.SOD.notifyScriptLoadedAndExecuteWaitingJobs("bravo.jslink.js");
 });
