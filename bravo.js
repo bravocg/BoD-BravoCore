@@ -3,7 +3,7 @@
 /*
 * Title: Bravo Core Library
 * Source: https://github.com/bravocg/core
-* Version: v1.6.5
+* Version: v1.6.7
 * Author: Gunjan Datta
 * Description: The Bravo core library translates the REST api as an object model.
 * 
@@ -1041,36 +1041,51 @@ BRAVO.Core = function () {
     // name - The name of the property.
     // value - The value to set the property to.
     var setProperty = function (name, value) {
-        // Ensure the value exists
-        if (value === undefined) { return; }
+        var promise = new BRAVO.Core.Promise();
 
-        // See if an update is needed
-        if (this[name] != null && this[name] == value) { return; }
+        // Ensure the value exists, and determine if an update is required
+        if (value === undefined && this[name] != null && this[name] == value) {
+            // Resolve the promise
+            promise.resolve(this[name] == value);
+        }
+        else {
+            // Create the data to update the property
+            var data = '{ "' + name + '": ' + (typeof (value) == "string" ? '"' + value + '"' : value) + ' }';
 
-        // Store the current setting, and disable the asynchronous flag
-        var isAsync = this.asyncFl;
-        this.asyncFl = false;
+            // Method called after the request is made
+            var postRequest = function (obj, response) {
+                // See if the update was successful
+                if (response == "") {
+                    // Update the property in the current object
+                    obj[name] = value;
 
-        // Create the data to update the property
-        var data = '{ "' + name + '": ' + (typeof (value) == "string" ? '"' + value + '"' : value) + ' }';
+                    // Return the promise, if we are using asynchronous requests
+                    return true;
+                }
 
-        // Execute the request
-        var response = executeMethod(this, "MERGE", this.__metadata.type, null, JSON.parse(data), { "IF-MATCH": "*" });
+                // Request was not successful
+                return false;
+            };
 
-        // Reset the asynchronous flag
-        this.asyncFl = isAsync;
 
-        // See if the update was successful
-        if (response == "") {
-            // Update the property in the current object
-            this[name] = value;
+            // Execute the request
+            var response = executeMethod(this, "MERGE", this.__metadata.type, null, JSON.parse(data), { "IF-MATCH": "*" });
 
-            // Property was updated successfully
-            return true;
+            // See if this is an asynchronous request
+            if (response.done) {
+                // Wait for the response to complete
+                response.done(function (obj, response) {
+                    // Resolve the promise
+                    promise.resolve(postRequest(obj, response));
+                });
+            }
+            else {
+                return postRequest(this, response);
+            }
         }
 
-        // Error setting the property
-        return false;
+        // Return the promise if we are using asynchronous requests
+        return this.asyncFl ? promise : false;
     };
 
     // Update Function Name
