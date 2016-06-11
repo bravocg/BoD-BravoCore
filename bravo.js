@@ -3,7 +3,7 @@
 /*
 * Title: Bravo Core Library
 * Source: https://github.com/bravocg/core
-* Version: v1.6.7
+* Version: v1.6.8
 * Author: Gunjan Datta
 * Description: The Bravo core library translates the REST api as an object model.
 * 
@@ -11,8 +11,11 @@
 * Released under the MIT license.
 */
 
-// Global variable
-var BRAVO = BRAVO || {};
+// **********************************************************************************
+// Namespace
+// **********************************************************************************
+if (window.Type) { window.Type.registerNamespace("BRAVO"); }
+else { window.BRAVO = window.BRAVO || {}; }
 
 // **********************************************************************************
 // Bravo Core Class
@@ -2883,8 +2886,11 @@ BRAVO.JSLink = function () {
             case "WorkflowStatus": fieldRenderer = new RawFieldRenderer(field.Name); break;
         };
 
+        // Get the current item
+        var currentItem = ctx.CurrentItem || ctx.ListData.Items[0];
+
         // Return the item's field value html
-        return fieldRenderer ? fieldRenderer.RenderField(ctx, field, ctx.CurrentItem, ctx.ListSchema) : ctx.CurrentItem[field.Name];
+        return fieldRenderer ? fieldRenderer.RenderField(ctx, field, currentItem, ctx.ListSchema) : currentItem[field.Name];
     };
 
     // Method to get a multi-user field html
@@ -2971,6 +2977,25 @@ BRAVO.JSLink = function () {
         return false;
     };
 
+    // Method to render the field and return the html for it.
+    // ctx - The form context.
+    // fieldName - The internal field name.
+    var renderFieldHtml = function (ctx, fieldName) {
+        // Get the field
+        var field = ctx.ListSchema.Field.filter(function (field) { return field.Name == fieldName; });
+        if (field) {
+            // Set the field as the current one
+            ctx.CurrentFieldSchema = field[0];
+            ctx.CurrentFieldValue = ctx.ListData.Items[0][fieldName];
+
+            // Generate the html for this field
+            return ctx.Templates.Fields[field[0].Name](ctx);
+        }
+
+        // Invalid field, return nothing
+        return "";
+    }
+
     // Method to send an email
     var sendEmail = function (subject, body, to, from) {
         // Get the current web
@@ -3012,6 +3037,7 @@ BRAVO.JSLink = function () {
         getViewSelectedItems: getViewSelectedItems,
         hideField: hideField,
         inEditMode: inEditMode,
+        renderFieldHtml: renderFieldHtml,
         sendEmail: sendEmail
     };
 }();
@@ -3162,20 +3188,28 @@ BRAVO.ModalDialog = function () {
     };
 }();
 
-// Ensure the dependencies are loaded
-BRAVO.Core.loadDependencies(function () {
-    // Ensure the dialog class is loaded
-    SP.SOD.executeFunc("sp.ui.dialog.js", "SP.UI.ModalDialog", function () {
-        // Notify scripts that the modal dialog class is loaded
-        SP.SOD.notifyScriptLoadedAndExecuteWaitingJobs("bravo.modaldialog.js");
+// The initialization for the library
+BRAVO.Init = function () {
+    // Ensure the dependencies are loaded
+    BRAVO.Core.loadDependencies(function () {
+        // Ensure the dialog class is loaded
+        SP.SOD.executeFunc("sp.ui.dialog.js", "SP.UI.ModalDialog", function () {
+            // Notify scripts that the modal dialog class is loaded
+            SP.SOD.notifyScriptLoadedAndExecuteWaitingJobs("bravo.modaldialog.js");
 
-        // Notify scripts that the bravo library is loaded
-        SP.SOD.notifyScriptLoadedAndExecuteWaitingJobs("bravo.js");
+            // Notify scripts that the bravo library is loaded
+            SP.SOD.notifyScriptLoadedAndExecuteWaitingJobs("bravo.js");
+        });
+
+        // Notify scripts that the core class is loaded
+        SP.SOD.notifyScriptLoadedAndExecuteWaitingJobs("bravo.core.js");
+
+        // Notify scripts that the js link class is loaded
+        SP.SOD.notifyScriptLoadedAndExecuteWaitingJobs("bravo.jslink.js");
     });
+}
 
-    // Notify scripts that the core class is loaded
-    SP.SOD.notifyScriptLoadedAndExecuteWaitingJobs("bravo.core.js");
+// Write the javascript to the page. This will ensure it's called when MDS is enabled
+document.write("<script type='text/javascript'>(function() { BRAVO.Init(); })();</script>");
 
-    // Notify scripts that the js link class is loaded
-    SP.SOD.notifyScriptLoadedAndExecuteWaitingJobs("bravo.jslink.js");
-});
+/* Bravo Core Library v1.6.8 | (c) Bravo Consulting Group, LLC (Bravo) | bravocg.com */
