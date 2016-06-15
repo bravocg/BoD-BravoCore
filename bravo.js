@@ -2936,9 +2936,8 @@ BRAVO.JSLink = function () {
 
     // Method to hide the row containing the field
     var hideField = function (ctx) {
-        // Get the list view
-        var listView = getListView(ctx);
-        if (listView && listView.getAttribute("data-hide-row-event") == null) {
+        // See if we have already set the event to hide fields
+        if (BRAVO.JSLink._hideFieldEventFl == null) {
             // Add an onload event to it
             window.addEventListener("load", function () {
                 // Query for the elements we need to hide
@@ -2953,12 +2952,12 @@ BRAVO.JSLink = function () {
                 }
             });
 
-            // Set the attribute
-            listView.setAttribute("data-hide-row-event", true);
+            // Set the flag
+            BRAVO.JSLink._hideFieldEventFl = true;
         }
 
         // Create an empty element
-        return "<div class='hide-row' />";
+        return "<div class='hide-row'>" + getFieldDefaultHtml(ctx) + "</div>";
     }
 
     // Method to determine if the page/form is currently being edited
@@ -2977,13 +2976,22 @@ BRAVO.JSLink = function () {
         return false;
     };
 
+    // Method to remove the row containing the field
+    var removeField = function (ctx) {
+        // Hide this field
+        hideField(ctx);
+
+        // Create an empty element
+        return "<div class='hide-row' />";
+    }
+
     // Method to render the field and return the html for it.
     // ctx - The form context.
     // fieldName - The internal field name.
     var renderFieldHtml = function (ctx, fieldName) {
         // Get the field
         var field = ctx.ListSchema.Field.filter(function (field) { return field.Name == fieldName; });
-        if (field) {
+        if (field && field.length > 0) {
             // Set the field as the current one
             ctx.CurrentFieldSchema = field[0];
             ctx.CurrentFieldValue = ctx.ListData.Items[0][fieldName];
@@ -3037,6 +3045,7 @@ BRAVO.JSLink = function () {
         getViewSelectedItems: getViewSelectedItems,
         hideField: hideField,
         inEditMode: inEditMode,
+        removeField: removeField,
         renderFieldHtml: renderFieldHtml,
         sendEmail: sendEmail
     };
