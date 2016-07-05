@@ -3,7 +3,7 @@
 /*
 * Title: Bravo Core Library
 * Source: https://github.com/bravocg/core
-* Version: v1.6.8
+* Version: v1.7.1
 * Author: Gunjan Datta
 * Description: The Bravo core library translates the REST api as an object model.
 * 
@@ -2498,6 +2498,34 @@ BRAVO.Help = function (objectType, methodName) {
 // The JS Link class
 BRAVO.JSLink = function () {
     // **********************************************************************************
+    // Templates
+    // **********************************************************************************
+
+    // Button Template
+    var _btnCancelTemplate = '<input class="ms-ButtonHeightWidth" type="button" value="{{Text}}" target="_self" onclick="BRAVO.ModalDialog.close();" />';
+    var _btnSaveTemplate = '<input class="ms-ButtonHeightWidth" type="button" value="Save" target="_self" onclick="SPClientForms.ClientFormManager.SubmitClientForm(\'{{FormID}}\');" />';
+    var _btnFormTemplate = '<div class="bravo-button-set"><div class="bravo-form-button">{{Save}}</div><div class="bravo-form-button">{{Cancel}}</div></div>';
+    var _btnTableTemplate = '<table width="100%" class="ms-formtoolbar" role="presentation" border="0" cellspacing="0" cellpadding="2"><tbody><tr>' +
+        '<td width="99%" class="ms-toolbar" nowrap="nowrap"><img width="1" height="18" alt="" src="/_layouts/15/images/blank.gif?rev=43" data-accessibility-nocheck="true"></td>' +
+        '<td class="ms-toolbar" nowrap="nowrap">{{Save}}</td>' +
+        '<td class="ms-separator">&nbsp;</td>' +
+        '<td class="ms-toolbar" nowrap="nowrap">{{Cancel}}</td>' +
+        '</tr></tbody></table>';
+
+    // Form Template
+    var _formTemplate = '<div class="bravo-form">{{Rows}}</div>';
+    var _formRowTemplate = '<div class="bravo-row">' +
+        '<div class="bravo-field-label{{Required}}">{{Label}}:</div>' +
+        '<div class="bravo-field">{{Field}}</div>' +
+        '<div class="bravo-field-desc">{{Description}}</div>' +
+        '</div>';
+
+    // Table Template
+    var _tblTemplate = '<table width="100%" class="ms-formtable" style="margin-top: 8px;" border="0" cellspacing="0" cellpadding="0"><tbody>{{TBODY}}</tbody></table>';
+    var _tblButtonTemplate = '<tr><td colspan="99"><table width="100%" class="ms-formtoolbar" role="presentation" border="0" cellspacing="0" cellpadding="2"><tr><td>{{Save}}</td><td class="ms-separator">&nbsp;</td><td>{{Cancel}}</td></tr></table></td></tr>';
+    var _tblRowTemplate = '<tr><td width="113" class="ms-formlabel" nowrap="true" valign="top">{{Label}}</td><td width="350" class="ms-formbody" valign="top">{{Field}}</td></tr>';
+
+    // **********************************************************************************
     // Global Variables
     // **********************************************************************************
 
@@ -2551,6 +2579,23 @@ BRAVO.JSLink = function () {
 
         // Return the current list
         return _currentList;
+    };
+
+    // Current List Fields
+    var _currentListFields = null;
+    var getCurrentListFields = function (ctx) {
+        // Return if it already exists
+        if (_currentListFields) { return _currentListFieldsl; }
+
+        // Get the current list
+        var list = getCurrentList(ctx);
+        if (list.exists) {
+            // Get the fields
+            _currentListFields = list.get_Fields();
+        }
+
+        // Return the current list fields
+        return _currentListFields;
     };
 
     // Current User
@@ -2721,6 +2766,33 @@ BRAVO.JSLink = function () {
         return fld.innerHTML;
     };
 
+    // Method to add a script reference to the page.
+    var addScript = function (url) {
+        // Create the element
+        var e = document.createElement("script");
+
+        // Set the properties
+        e.setAttribute("src", url);
+        e.setAttribute("type", "text/javascript");
+
+        // Add the element to the head
+        document.head.appendChild(e);
+    };
+
+    // Method to add a style sheet reference to the page.
+    var addStyle = function (url) {
+        // Create the element
+        var e = document.createElement("link");
+
+        // Set the properties
+        e.setAttribute("href", url);
+        e.setAttribute("rel", "stylesheet");
+        e.setAttribute("type", "text/css");
+
+        // Add the element to the head
+        document.head.appendChild(e);
+    };
+
     // Method to add custom validation to the current field
     var addValidation = function (ctx, validationFunc) {
         // Validate the input
@@ -2831,30 +2903,45 @@ BRAVO.JSLink = function () {
     // The field validator helper method
     var fieldValidator = function (validationFunc) { fieldValidator.prototype.Validate = validationFunc; };
 
+    // Method to get the default form fields
+    // ctx - The form context.
+    var getDefaultFormFields = function (ctx) {
+        var formFields = [];
+
+        // Get the list
+        var list = getCurrentList(ctx);
+        if (list.exists) {
+            // Get the fields
+            var fields = list.get_Fields();
+
+            // Get the default content type field links
+            var fieldLinks = list.get_ContentTypes().results[0].get_FieldLinks().results;
+
+            // Default the form fields
+            for (var i = 0; i < fieldLinks.length; i++) {
+                // Get the field
+                var field = fields.getByTitle(fieldLinks[i].Name);
+                if (field) {
+                    // See if this field should be displayed
+                    if (field.Hidden || field.Group == "_Hidden" || !field.CanBeDeleted) { continue; }
+
+                    // Add the field
+                    formFields.push(field.InternalName);
+                }
+            }
+        }
+
+        // Return the form fields
+        return formFields;
+    };
+
     // Method to get the default field html
     var getFieldDefaultHtml = function (ctx, field, formType) {
         // Determine the field type
         var fieldType = field ? field.Type : (ctx.CurrentFieldSchema ? ctx.CurrentFieldSchema.Type : null);
 
         // Ensure the form type is set
-        formType = formType ? formType : null;
-        if (formType == null) {
-            // Determine the form type
-            switch (ctx.ControlMode) {
-                case SPClientTemplates.ClientControlMode.DisplayForm:
-                    formType = "DisplayForm";
-                    break;
-                case SPClientTemplates.ClientControlMode.EditForm:
-                    formType = "EditForm";
-                    break;
-                case SPClientTemplates.ClientControlMode.NewForm:
-                    formType = "NewForm";
-                    break;
-                case SPClientTemplates.ClientControlMode.View:
-                    formType = "View";
-                    break;
-            }
-        }
+        formType = formType ? formType : getFormType(ctx);
 
         // Ensure a field to method mapper exists
         if (_fieldToMethodMapper[fieldType] && _fieldToMethodMapper[fieldType][formType]) {
@@ -2925,14 +3012,42 @@ BRAVO.JSLink = function () {
         return getFieldMultiUserHtml(ctx, [user]);
     };
 
+    // Method to determine the form type
+    // ctx - The form context.
+    var getFormType = function (ctx) {
+        var formType = null;
+
+        // Determine the form type
+        switch (ctx.ControlMode) {
+            case SPClientTemplates.ClientControlMode.DisplayForm:
+                formType = "DisplayForm";
+                break;
+            case SPClientTemplates.ClientControlMode.EditForm:
+                formType = "EditForm";
+                break;
+            case SPClientTemplates.ClientControlMode.NewForm:
+                formType = "NewForm";
+                break;
+            case SPClientTemplates.ClientControlMode.View:
+                formType = "View";
+                break;
+        }
+
+        // Return the form type
+        return formType;
+    };
+
     // Method to get the list view element
-    var getListView = function (ctx) { return document.querySelector("#WebPart" + (ctx.FormUniqueId || ctx.wpq) + " .ms-formtable"); }
+    var getListView = function (ctx) { var wp = getWebPart(ctx); return wp ? wp.querySelector(".ms-formtable") : null; };
 
     // Method to get the view's list items
     var getViewListItems = function (ctx) { return ctx.ListData ? ctx.ListData.Row : []; };
 
     // Method to get the view's selected items
     var getViewSelectedItems = function (ctx) { return SP.ListOperation.Selection.getSelectedItems(); };
+
+    // Method to get the list view element
+    var getWebPart = function (ctx) { return document.querySelector("#WebPart" + (ctx.FormUniqueId || ctx.wpq)); };
 
     // Method to hide the row containing the field
     var hideField = function (ctx) {
@@ -2958,7 +3073,7 @@ BRAVO.JSLink = function () {
 
         // Create an empty element
         return "<div class='hide-row'>" + getFieldDefaultHtml(ctx) + "</div>";
-    }
+    };
 
     // Method to determine if the page/form is currently being edited
     var inEditMode = function () {
@@ -2983,12 +3098,16 @@ BRAVO.JSLink = function () {
 
         // Create an empty element
         return "<div class='hide-row' />";
-    }
+    };
 
     // Method to render the field and return the html for it.
     // ctx - The form context.
     // fieldName - The internal field name.
-    var renderFieldHtml = function (ctx, fieldName) {
+    // showDescFl - Flag to display the description.
+    var renderFieldHtml = function (ctx, fieldName, showDescFl) {
+        // Default the flag to display the description
+        showDescFl = showDescFl == null ? true : showDescFl;
+
         // Get the field
         var field = ctx.ListSchema.Field.filter(function (field) { return field.Name == fieldName; });
         if (field && field.length > 0) {
@@ -2996,13 +3115,113 @@ BRAVO.JSLink = function () {
             ctx.CurrentFieldSchema = field[0];
             ctx.CurrentFieldValue = ctx.ListData.Items[0][fieldName];
 
-            // Generate the html for this field
-            return ctx.Templates.Fields[field[0].Name](ctx);
+            // Update the description
+            ctx.CurrentFieldSchema.Description = showDescFl ? ctx.CurrentFieldSchema.Description : "";
+
+            // Note - There is a bug w/ the user field containing a trailing </div> tag that is causing the html to shift in the form.
+            // The code below will ensure the html is normalized.
+
+            // Create a dummy element to store the html for this field
+            var fieldHtml = document.createElement("div");
+            fieldHtml.innerHTML = ctx.Templates.Fields[field[0].Name](ctx);
+
+            // Return the field's html
+            return fieldHtml.innerHTML;
         }
 
         // Invalid field, return nothing
         return "";
-    }
+    };
+
+    // Method to render a form.
+    // ctx - The form context.
+    // formFields - The fields to render in the form.
+    var renderForm = function (ctx, formFields) {
+        var formRows = "";
+
+        // Default the form fields, if needed
+        formFields = formFields ? formFields : getDefaultFormFields(ctx);
+
+        // Get the current list fields
+        var fields = getCurrentListFields();
+
+        // Parse the fields to add
+        for (var i = 0; i < formFields.length; i++) {
+            // Get the field
+            var field = fields.getByTitle(formFields[i]);
+            if (field) {
+                // Append the row
+                formRows += _formRowTemplate
+                    .replace(/{{Description}}/g, field.Description)
+                    .replace(/{{Field}}/g, BRAVO.JSLink.renderFieldHtml(ctx, field.InternalName, false))
+                    .replace(/{{Label}}/g, field.Title)
+                    .replace(/{{Required}}/g, field.Required ? " bravo-field-required" : "");
+            }
+        }
+
+        // Return the form
+        return _formTemplate.replace(/{{Rows}}/g, formRows);
+    };
+
+    // Method to render the form buttons
+    // ctx - The form context.
+    var renderFormButtons = function (ctx) {
+        // Determine the form type
+        var formType = getFormType(ctx);
+
+        // Determine what to render, based on the form type
+        var renderSaveButtonFl = formType == "NewForm" || formType == "EditForm";
+        var renderCloseButtonFl = !renderSaveButtonFl;
+
+        // Return the table
+        return _btnFormTemplate
+            .replace(/{{Save}}/g, renderSaveButtonFl ? _btnSaveTemplate.replace(/{{FormID}}/g, ctx.FormUniqueId) : "")
+            .replace(/{{Cancel}}/g, _btnCancelTemplate.replace(/{{Text}}/g, renderCloseButtonFl ? "Close" : "Cancel"));
+    };
+
+    // Method to render a table.
+    // ctx - The form context.
+    // formFields - The fields to render in the table.
+    var renderTable = function (ctx, formFields) {
+        var tbody = "";
+
+        // Default the form fields, if needed
+        formFields = formFields ? formFields : getDefaultFormFields(ctx);
+
+        // Get the current list fields
+        var fields = getCurrentListFields();
+
+        // Parse the form fields
+        for (var i = 0; i < formFields.length; i++) {
+            // Get the field
+            var field = fields.getByTitle(formFields[i]);
+            if (field) {
+                // Append the row for this field
+                tbody += _tblRowTemplate
+                    .replace(/{{Label}}/g, field.Title)
+                    .replace(/{{Field}}/g, BRAVO.JSLink.renderFieldHtml(ctx, field.InternalName));
+            }
+        }
+
+        // Return the table
+        return _tblTemplate.replace(/{{TBODY}}/g, tbody);
+    };
+
+    // Method to render the table buttons
+    // ctx - The form context.
+    var renderTableButtons = function (ctx) {
+        // Determine the form type
+        var formType = getFormType(ctx);
+
+        // Determine what to render, based on the form type
+        var renderSaveButtonFl = formType == "NewForm" || formType == "EditForm";
+        var renderCloseButtonFl = !renderSaveButtonFl;
+
+        // Return the table
+        return _btnTableTemplate
+            .replace(/{{Save}}/g, renderSaveButtonFl ? _btnSaveTemplate.replace(/{{FormID}}/g, ctx.FormUniqueId) : "")
+            .replace(/{{Cancel}}/g, _btnCancelTemplate.replace(/{{Text}}/g, renderCloseButtonFl ? "Close" : "Cancel"));
+    };
 
     // Method to send an email
     var sendEmail = function (subject, body, to, from) {
@@ -3028,6 +3247,8 @@ BRAVO.JSLink = function () {
 
     return {
         addFieldNameAttribute: addFieldNameAttribute,
+        addScript: addScript,
+        addStyle: addStyle,
         addValidation: addValidation,
         defaultToCurrentUser: defaultToCurrentUser,
         disableEdit: disableEdit,
@@ -3043,10 +3264,15 @@ BRAVO.JSLink = function () {
         getListView: getListView,
         getViewListItems: getViewListItems,
         getViewSelectedItems: getViewSelectedItems,
+        getWebPart: getWebPart,
         hideField: hideField,
         inEditMode: inEditMode,
         removeField: removeField,
         renderFieldHtml: renderFieldHtml,
+        renderForm: renderForm,
+        renderFormButtons: renderFormButtons,
+        renderTable: renderTable,
+        renderTableButtons: renderTableButtons,
         sendEmail: sendEmail
     };
 }();
@@ -3063,13 +3289,28 @@ BRAVO.ModalDialog = function () {
 
     // Method to close the modal dialog
     var close = function (dialogResult, returnVal) {
-        // See if the dialog result is defined and is a number
-        if (dialogResult != null && typeof (dialogResult) === "number") {
-            // Close the dialog
-            SP.UI.ModalDialog.commonModalDialogClose(dialogResult, returnVal);
-        } else {
-            // Close the dialog with the 'Cancel' result
-            SP.UI.ModalDialog.commonModalDialogClose(SP.UI.DialogResult.cancel, returnVal);
+        // Ensure this is a dialog
+        if (isDialog()) {
+            // See if the dialog result is defined and is a number
+            if (dialogResult != null && typeof (dialogResult) === "number") {
+                // Close the dialog
+                SP.UI.ModalDialog.commonModalDialogClose(dialogResult, returnVal);
+            } else {
+                // Close the dialog with the 'Cancel' result
+                SP.UI.ModalDialog.commonModalDialogClose(SP.UI.DialogResult.cancel, returnVal);
+            }
+        }
+        else {
+            // Get the redirect url from the query string
+            var redirectUrl = BRAVO.Core.getQueryStringValue("Source");
+            if (redirectUrl && redirectUrl.length > 0) {
+                // Redirect the user
+                window.location.href = redirectUrl;
+            }
+            else {
+                // Go back a page
+                window.history.back();
+            }
         }
     };
 
@@ -3221,4 +3462,4 @@ BRAVO.Init = function () {
 // Write the javascript to the page. This will ensure it's called when MDS is enabled
 document.write("<script type='text/javascript'>(function() { BRAVO.Init(); })();</script>");
 
-/* Bravo Core Library v1.6.8 | (c) Bravo Consulting Group, LLC (Bravo) | bravocg.com */
+/* Bravo Core Library v1.7.1 | (c) Bravo Consulting Group, LLC (Bravo) | bravocg.com */
