@@ -98,8 +98,6 @@ BRAVO.Core = function () {
                     "reserveListItemId", "resetRoleInheritance"],
                 postDataInBodyNoArgs: ["getChanges", "getItems", "getListItemChangesSinceToken"],
                 custom: [
-                    { name: "addAttachment", "function": function (fileName, content) { return this.executePost("attachmentfiles/add", { FileName: fileName }, content, true); } },
-                    { name: "addAttachmentFile", "function": function (file) { var thisObj = this; var promise = new BRAVO.Core.Promise(); getFileInfo(file).done(function (name, buffer) { if (name && buffer) { thisObj.addAttachment(name, buffer).done(function (file) { promise.resolve(file); }); } else { promise.resolve(); } }); return promise; } },
                     { name: "addContentType", "function": function (data) { return this.executePost("contenttypes", null, data, true, "SP.ContentType"); } },
                     { name: "addExistingContentType", "function": function (data) { return this.executePost("contenttypes/addAvailableContentType", data); } },
                     { name: "addField", "function": function (data) { return this.executePost("fields/add", null, data, true, "SP.Field"); } },
@@ -136,7 +134,8 @@ BRAVO.Core = function () {
                 post: ["breakRoleInheritance", "deleteObject", "recycle", "resetRoleInheritance"],
                 postDataInBodyNoArgs: ["validateUpdateListItem"],
                 custom: [
-                    { name: "addAttachment", "function": function (data) { return true; } },
+                    { name: "addAttachment", "function": function (fileName, content) { return this.executePost("attachmentfiles/add", { FileName: fileName }, content, true); } },
+                    { name: "addAttachmentFile", "function": function (file) { var thisObj = this; var promise = new BRAVO.Core.Promise(); getFileInfo(file).done(function (name, buffer) { if (name && buffer) { thisObj.addAttachment(name, buffer).done(function (file) { promise.resolve(file); }); } else { promise.resolve(); } }); return promise; } },
                     { name: "update", "function": function (data) { return this.executePost(null, null, data, true, this.__metadata.type, "MERGE"); } }
                 ]
             },
