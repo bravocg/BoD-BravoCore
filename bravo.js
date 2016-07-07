@@ -3,7 +3,7 @@
 /*
 * Title: Bravo Core Library
 * Source: https://github.com/bravocg/core
-* Version: v1.7.2
+* Version: v1.7.4
 * Author: Gunjan Datta
 * Description: The Bravo core library translates the REST api as an object model.
 * 
@@ -3510,4 +3510,4 @@ BRAVO.Init = function () {
 // Write the javascript to the page. This will ensure it's called when MDS is enabled
 document.write("<script type='text/javascript'>(function() { BRAVO.Init(); })();</script>");
 
-/* Bravo Core Library v1.7.2 | (c) Bravo Consulting Group, LLC (Bravo) | bravocg.com */
+/* Bravo Core Library v1.7.4 | (c) Bravo Consulting Group, LLC (Bravo) | bravocg.com */
