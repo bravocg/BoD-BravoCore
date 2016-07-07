@@ -98,6 +98,8 @@ BRAVO.Core = function () {
                     "reserveListItemId", "resetRoleInheritance"],
                 postDataInBodyNoArgs: ["getChanges", "getItems", "getListItemChangesSinceToken"],
                 custom: [
+                    { name: "addAttachment", "function": function (fileName, content) { return this.executePost("attachmentfiles/add", { FileName: fileName }, content, true); } },
+                    { name: "addAttachmentFile", "function": function (file) { var thisObj = this; var promise = new BRAVO.Core.Promise(); getFileInfo(file).done(function (name, buffer) { if (name && buffer) { thisObj.addAttachment(name, buffer).done(function (file) { promise.resolve(file); }); } else { promise.resolve(); } }); return promise; } },
                     { name: "addContentType", "function": function (data) { return this.executePost("contenttypes", null, data, true, "SP.ContentType"); } },
                     { name: "addExistingContentType", "function": function (data) { return this.executePost("contenttypes/addAvailableContentType", data); } },
                     { name: "addField", "function": function (data) { return this.executePost("fields/add", null, data, true, "SP.Field"); } },
