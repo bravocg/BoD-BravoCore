@@ -3,7 +3,7 @@
 /*
 * Title: Bravo Core Library
 * Source: https://github.com/bravocg/core
-* Version: v1.7.1
+* Version: v1.7.2
 * Author: Gunjan Datta
 * Description: The Bravo core library translates the REST api as an object model.
 * 
@@ -134,6 +134,7 @@ BRAVO.Core = function () {
                 post: ["breakRoleInheritance", "deleteObject", "recycle", "resetRoleInheritance"],
                 postDataInBodyNoArgs: ["validateUpdateListItem"],
                 custom: [
+                    { name: "addAttachment", "function": function (data) { return true; } },
                     { name: "update", "function": function (data) { return this.executePost(null, null, data, true, this.__metadata.type, "MERGE"); } }
                 ]
             },
@@ -300,6 +301,13 @@ BRAVO.Core = function () {
             // **********************************************************************************
             // By End Point
             // **********************************************************************************
+            // Attachment Files
+            "attachmentfiles": {
+                custom: [
+                    { name: "add", "function": function (fileName, content) { return this.executePost("add", { FileName: fileName }, content, true); } },
+                    { name: "addFile", "function": function (file) { var thisObj = this; var promise = new BRAVO.Core.Promise(); getFileInfo(file).done(function (name, buffer) { if (name && buffer) { thisObj.add(name, buffer).done(function (file) { promise.resolve(file); }); } else { promise.resolve(); } }); return promise; } },
+                ]
+            },
             // Content Type Collection
             "contenttypes": {
                 get: ["getById"],
@@ -773,6 +781,45 @@ BRAVO.Core = function () {
         return url;
     };
 
+    // Method to get the file information.
+    // file - An input element w/ its type set to 'file'.
+    var getFileInfo = function (file) {
+        var promise = new BRAVO.Core.Promise();
+
+        // Ensure the file exists
+        if (file && file.name) {
+            // Create a file reader
+            var reader = FileReader ? new FileReader() : null;
+            if (reader) {
+                // Event triggered after the file is read successfully
+                reader.onloadend = function (e) {
+                    // Resolve the promise
+                    promise.resolve(file.name, e.target.result);
+                }
+
+                // Event triggered on error
+                reader.onerror = function (e) {
+                    // Resolve the promise
+                    promise.resolve(e.target.error);
+                }
+
+                // Read the file as an array buffer
+                reader.readAsArrayBuffer(file);
+            }
+            else {
+                // Resolve the promise
+                promise.resolve();
+            }
+        }
+        else {
+            // Resolve the promise
+            promise.resolve();
+        }
+
+        // Return the promise
+        return promise;
+    }
+
     // Get Query String Value
     // This method will get the query string value by the specified key.
     // key - The query string key.
@@ -985,7 +1032,7 @@ BRAVO.Core = function () {
                     window.clearInterval(intervalId);
 
                     // Execute the callback function
-                    if (callback && typeof(callback) === "function") { callback(); }
+                    if (callback && typeof (callback) === "function") { callback(); }
                 }
 
                 // See if we have hit the maximum # of tries
@@ -2515,7 +2562,7 @@ BRAVO.JSLink = function () {
     // Form Template
     var _formTemplate = '<div class="bravo-form">{{Rows}}</div>';
     var _formRowTemplate = '<div class="bravo-row">' +
-        '<div class="bravo-field-label{{Required}}">{{Label}}:</div>' +
+        '<div class="bravo-field-label{{Required}}">{{Label}}</div>' +
         '<div class="bravo-field">{{Field}}</div>' +
         '<div class="bravo-field-desc">{{Description}}</div>' +
         '</div>';
@@ -3198,7 +3245,7 @@ BRAVO.JSLink = function () {
             if (field) {
                 // Append the row for this field
                 tbody += _tblRowTemplate
-                    .replace(/{{Label}}/g, field.Title)
+                    .replace(/{{Label}}/g, field.Title + (field.Required ? '<span class="ms-formvalidation"> *</span>' : ""))
                     .replace(/{{Field}}/g, BRAVO.JSLink.renderFieldHtml(ctx, field.InternalName));
             }
         }
@@ -3462,4 +3509,4 @@ BRAVO.Init = function () {
 // Write the javascript to the page. This will ensure it's called when MDS is enabled
 document.write("<script type='text/javascript'>(function() { BRAVO.Init(); })();</script>");
 
-/* Bravo Core Library v1.7.1 | (c) Bravo Consulting Group, LLC (Bravo) | bravocg.com */
+/* Bravo Core Library v1.7.2 | (c) Bravo Consulting Group, LLC (Bravo) | bravocg.com */
