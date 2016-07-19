@@ -3,7 +3,7 @@
 /*
 * Title: Bravo Core Library
 * Source: https://github.com/bravocg/core
-* Version: v1.7.4
+* Version: v1.7.6
 * Author: Gunjan Datta
 * Description: The Bravo core library translates the REST api as an object model.
 * 
@@ -786,6 +786,9 @@ BRAVO.Core = function () {
     // file - An input element w/ its type set to 'file'.
     var getFileInfo = function (file) {
         var promise = new BRAVO.Core.Promise();
+
+        // Set the file
+        file = file.files && file.files.length > 0 ? file.files[0] : file;
 
         // Ensure the file exists
         if (file && file.name) {
@@ -2549,10 +2552,16 @@ BRAVO.JSLink = function () {
     // Templates
     // **********************************************************************************
 
+    // Button Classes
+    var _btnClasses = {
+        Button: "bravo-form-button",
+        Row: "bravo-row bravo-button-set"
+    };
+
     // Button Template
     var _btnCancelTemplate = '<input class="ms-ButtonHeightWidth" type="button" value="{{Text}}" target="_self" onclick="BRAVO.ModalDialog.close();" />';
     var _btnSaveTemplate = '<input class="ms-ButtonHeightWidth" type="button" value="Save" target="_self" onclick="SPClientForms.ClientFormManager.SubmitClientForm(\'{{FormID}}\');" />';
-    var _btnFormTemplate = '<div class="bravo-button-set"><div class="bravo-form-button">{{Save}}</div><div class="bravo-form-button">{{Cancel}}</div></div>';
+    var _btnFormTemplate = '<div class="{{CSSForm}}"><div class="{{CSSRow}}"><div class="{{CSSButton}}">{{Save}}</div><div class="{{CSSButton}}">{{Cancel}}</div></div></div>';
     var _btnTableTemplate = '<table width="100%" class="ms-formtoolbar" role="presentation" border="0" cellspacing="0" cellpadding="2"><tbody><tr>' +
         '<td width="99%" class="ms-toolbar" nowrap="nowrap"><img width="1" height="18" alt="" src="/_layouts/15/images/blank.gif?rev=43" data-accessibility-nocheck="true"></td>' +
         '<td class="ms-toolbar" nowrap="nowrap">{{Save}}</td>' +
@@ -2560,18 +2569,28 @@ BRAVO.JSLink = function () {
         '<td class="ms-toolbar" nowrap="nowrap">{{Cancel}}</td>' +
         '</tr></tbody></table>';
 
+    // Form Classes
+    var _formClasses = {
+        Field: "bravo-field",
+        FieldDescription: "bravo-field-desc",
+        FieldLabel: "bravo-field-label",
+        FieldRequired: "bravo-field-required",
+        Form: "bravo-form",
+        Row: "bravo-row"
+    };
+
     // Form Template
-    var _formTemplate = '<div class="bravo-form">{{Rows}}</div>';
-    var _formRowTemplate = '<div class="bravo-row">' +
-        '<div class="bravo-field-label{{Required}}">{{Label}}</div>' +
-        '<div class="bravo-field">{{Field}}</div>' +
-        '<div class="bravo-field-desc">{{Description}}</div>' +
+    var _formTemplate = '<div class="{{CSSForm}}">{{Rows}}</div>';
+    var _formRowTemplate = '<div class="{{CSSRow}}" data-field-name="{{FieldName}}">' +
+        '<div data-field-name="{{FieldName}}" class="{{CSSFieldLabel}}{{CSSFieldRequired}}">{{Label}}</div>' +
+        '<div data-field-name="{{FieldName}}" class="{{CSSField}}">{{Field}}</div>' +
+        '<div data-field-name="{{FieldName}}" class="{{CSSFieldDescription}}">{{Description}}</div>' +
         '</div>';
 
     // Table Template
     var _tblTemplate = '<table width="100%" class="ms-formtable" style="margin-top: 8px;" border="0" cellspacing="0" cellpadding="0"><tbody>{{TBODY}}</tbody></table>';
     var _tblButtonTemplate = '<tr><td colspan="99"><table width="100%" class="ms-formtoolbar" role="presentation" border="0" cellspacing="0" cellpadding="2"><tr><td>{{Save}}</td><td class="ms-separator">&nbsp;</td><td>{{Cancel}}</td></tr></table></td></tr>';
-    var _tblRowTemplate = '<tr><td width="113" class="ms-formlabel" nowrap="true" valign="top">{{Label}}</td><td width="350" class="ms-formbody" valign="top">{{Field}}</td></tr>';
+    var _tblRowTemplate = '<tr data-field-name="{{FieldName}}"><td width="113" class="ms-formlabel" data-field-name="{{FieldName}}" nowrap="true" valign="top">{{Label}}</td><td width="350" class="ms-formbody" data-field-name="{{FieldName}}" valign="top">{{Field}}</td></tr>';
 
     // **********************************************************************************
     // Global Variables
@@ -2598,7 +2617,7 @@ BRAVO.JSLink = function () {
         if (itemId) {
             // Get the current list
             var list = getCurrentList(ctx);
-            if (list.exists) {
+            if (list && list.exists) {
                 // Get the current list item
                 _currentItem = list.getItemById(itemId);
             }
@@ -2618,11 +2637,11 @@ BRAVO.JSLink = function () {
         var web = getCurrentWeb();
         if (web.exists) {
             // Get the current list id or title
-            var listId = ctx && ctx.FormContext ? ctx.FormContext.listAttributes.Id : null;
-            var listTitle = ctx && ctx.ListTitle ? ctx.ListTitle : ctx.ListName;
+            var listId = ctx && ctx.FormContext && ctx.FormContext.listAttributes ? ctx.FormContext.listAttributes.Id : null;
+            var listTitle = ctx ? ctx.ListTitle || ctx.ListName : null;
 
             // Get the list
-            _currentList = listId ? web.getListById(listId) : web.getListByTitle(listTitle);
+            _currentList = listId ? web.getListById(listId) : (listTitle ? web.getListByTitle(listTitle) : null);
         }
 
         // Return the current list
@@ -2633,11 +2652,11 @@ BRAVO.JSLink = function () {
     var _currentListFields = null;
     var getCurrentListFields = function (ctx) {
         // Return if it already exists
-        if (_currentListFields) { return _currentListFieldsl; }
+        if (_currentListFields) { return _currentListFields; }
 
         // Get the current list
         var list = getCurrentList(ctx);
-        if (list.exists) {
+        if (list && list.exists) {
             // Get the fields
             _currentListFields = list.get_Fields();
         }
@@ -2956,12 +2975,10 @@ BRAVO.JSLink = function () {
     var getDefaultFormFields = function (ctx) {
         var formFields = [];
 
-        // Get the list
+        // Get the list and fields
         var list = getCurrentList(ctx);
-        if (list.exists) {
-            // Get the fields
-            var fields = list.get_Fields();
-
+        var fields = list && list.exists ? list.get_Fields() : null;
+        if (fields) {
             // Get the default content type field links
             var fieldLinks = list.get_ContentTypes().results[0].get_FieldLinks().results;
 
@@ -2971,7 +2988,7 @@ BRAVO.JSLink = function () {
                 var field = fields.getByTitle(fieldLinks[i].Name);
                 if (field) {
                     // See if this field should be displayed
-                    if (field.Hidden || field.Group == "_Hidden" || !field.CanBeDeleted) { continue; }
+                    if (field.Hidden || field.Group == "_Hidden" || (!field.CanBeDeleted && field.InternalName != "Title")) { continue; }
 
                     // Add the field
                     formFields.push(field.InternalName);
@@ -3098,17 +3115,31 @@ BRAVO.JSLink = function () {
     var getWebPart = function (ctx) { return document.querySelector("#WebPart" + (ctx.FormUniqueId || ctx.wpq)); };
 
     // Method to hide the row containing the field
+    // ctx - The form context.
     var hideField = function (ctx) {
         // See if we have already set the event to hide fields
         if (BRAVO.JSLink._hideFieldEventFl == null) {
             // Add an onload event to it
             window.addEventListener("load", function () {
+                debugger;
                 // Query for the elements we need to hide
                 var fieldElements = document.querySelectorAll(".hide-row");
                 for (var i = 0; i < fieldElements.length; i++) {
-                    // Find the parent row
                     var fieldElement = fieldElements[i];
-                    while (fieldElement && fieldElement.nodeName.toLowerCase() != "tr") { fieldElement = fieldElement.parentNode; }
+
+                    // Ensure the parent element exists
+                    if (fieldElement.parentNode && fieldElement.parentNode.parentNode) {
+                        // See if the parent element is this row element
+                        if (fieldElement.parentNode.getAttribute("data-field-name") == fieldElement.parentNode.parentNode.getAttribute("data-field-name")) {
+                            // Set the element to the parent
+                            fieldElement = fieldElement.parentNode.parentNode;
+                        }
+                        else {
+                            // Find the parent row
+                            while (fieldElement && fieldElement.nodeName.toLowerCase() != "tr") { fieldElement = fieldElement.parentNode; }
+                        }
+                    }
+
 
                     // Hide the row
                     if (fieldElement) { fieldElement.style.display = "none"; }
@@ -3184,36 +3215,52 @@ BRAVO.JSLink = function () {
     // Method to render a form.
     // ctx - The form context.
     // formFields - The fields to render in the form.
-    var renderForm = function (ctx, formFields) {
+    var renderForm = function (ctx, formFields, css) {
         var formRows = "";
 
-        // Default the form fields, if needed
-        formFields = formFields ? formFields : getDefaultFormFields(ctx);
+        // Default the css
+        css = css ? css : _formClasses;
 
         // Get the current list fields
-        var fields = getCurrentListFields();
+        var fields = getCurrentListFields(ctx);
 
-        // Parse the fields to add
-        for (var i = 0; i < formFields.length; i++) {
-            // Get the field
-            var field = fields.getByTitle(formFields[i]);
-            if (field) {
-                // Append the row
-                formRows += _formRowTemplate
-                    .replace(/{{Description}}/g, field.Description)
-                    .replace(/{{Field}}/g, BRAVO.JSLink.renderFieldHtml(ctx, field.InternalName, false))
-                    .replace(/{{Label}}/g, field.Title)
-                    .replace(/{{Required}}/g, field.Required ? " bravo-field-required" : "");
+        // Default the form fields
+        formFields = formFields ? formFields : (fields ? getDefaultFormFields(ctx) : null);
+
+        // Ensure the form and list fields exist
+        if (formFields && fields) {
+            // Parse the fields to add
+            for (var i = 0; i < formFields.length; i++) {
+                // Get the field
+                var field = fields.getByTitle(formFields[i]);
+                if (field) {
+                    // Append the row
+                    formRows += _formRowTemplate
+                        .replace(/{{CSSField}}/g, css.Field ? css.Field : _formClasses.Field)
+                        .replace(/{{CSSFieldDescription}}/g, css.FieldDescription ? css.FieldDescription : _formClasses.FieldDescription)
+                        .replace(/{{CSSFieldLabel}}/g, css.FieldLabel ? css.FieldLabel : _formClasses.FieldLabel)
+                        .replace(/{{CSSFieldRequired}}/g, field.Required ? " " + (css.FieldRequired ? css.FieldRequired : _formClasses.FieldRequired) : "")
+                        .replace(/{{CSSRow}}/g, css.Row ? css.Row : _formClasses.Row)
+                        .replace(/{{Description}}/g, field.Description)
+                        .replace(/{{Field}}/g, BRAVO.JSLink.renderFieldHtml(ctx, field.InternalName, false))
+                        .replace(/{{FieldName}}/g, field.InternalName)
+                        .replace(/{{Label}}/g, field.Title);
+                }
             }
         }
 
         // Return the form
-        return _formTemplate.replace(/{{Rows}}/g, formRows);
+        return _formTemplate
+            .replace(/{{CSSForm}}/g, css.Form ? css.Form : _formClasses.Form)
+            .replace(/{{Rows}}/g, formRows);
     };
 
     // Method to render the form buttons
     // ctx - The form context.
-    var renderFormButtons = function (ctx) {
+    var renderFormButtons = function (ctx, css) {
+        // Default the css
+        css = css ? css : _btnClasses;
+
         // Determine the form type
         var formType = getFormType(ctx);
 
@@ -3223,6 +3270,9 @@ BRAVO.JSLink = function () {
 
         // Return the table
         return _btnFormTemplate
+            .replace(/{{CSSButton}}/g, css.Form ? css.Button : _btnClasses.Button)
+            .replace(/{{CSSForm}}/g, css.Form ? css.Form : _btnClasses.Form)
+            .replace(/{{CSSRow}}/g, css.Row ? css.Row : _btnClasses.Row)
             .replace(/{{Save}}/g, renderSaveButtonFl ? _btnSaveTemplate.replace(/{{FormID}}/g, ctx.FormUniqueId) : "")
             .replace(/{{Cancel}}/g, _btnCancelTemplate.replace(/{{Text}}/g, renderCloseButtonFl ? "Close" : "Cancel"));
     };
@@ -3247,7 +3297,8 @@ BRAVO.JSLink = function () {
                 // Append the row for this field
                 tbody += _tblRowTemplate
                     .replace(/{{Label}}/g, field.Title + (field.Required ? '<span class="ms-formvalidation"> *</span>' : ""))
-                    .replace(/{{Field}}/g, BRAVO.JSLink.renderFieldHtml(ctx, field.InternalName));
+                    .replace(/{{Field}}/g, BRAVO.JSLink.renderFieldHtml(ctx, field.InternalName))
+                    .replace(/{{FieldName}}/g, field.InternalName);
             }
         }
 
@@ -3510,4 +3561,4 @@ BRAVO.Init = function () {
 // Write the javascript to the page. This will ensure it's called when MDS is enabled
 document.write("<script type='text/javascript'>(function() { BRAVO.Init(); })();</script>");
 
-/* Bravo Core Library v1.7.4 | (c) Bravo Consulting Group, LLC (Bravo) | bravocg.com */
+/* Bravo Core Library v1.7.6 | (c) Bravo Consulting Group, LLC (Bravo) | bravocg.com */
