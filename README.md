@@ -1,5 +1,4 @@
-This library has been re-written in TypeScript. The new location of this project is:
-
+This library has been re-written in TypeScript. The new location of this project is located [here](https://github.com/gunjandatta/sprest).
 
 # Bravo Core Library #
 This library utilizes the SharePoint REST api as an object model.
