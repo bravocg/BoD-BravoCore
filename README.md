@@ -1,3 +1,6 @@
+This library has been re-written in TypeScript. The new location of this project is:
+
+
 # Bravo Core Library #
 This library utilizes the SharePoint REST api as an object model.
 
