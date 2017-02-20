@@ -1,6 +1,3 @@
-# Update #
-This library has been re-written in TypeScript. The location of the new project is located [here](https://github.com/gunjandatta/sprest).
-
 # Bravo Core Library #
 This library utilizes the SharePoint REST api as an object model.
 
