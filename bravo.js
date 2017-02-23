@@ -809,10 +809,19 @@ BRAVO.Core = function () {
                         },
                         true
                     ).then(checkBadResponseStatus).then(function (response) {
-                        resolve({
-                            obj: obj,
-                            response: response
-                        });
+                        if (bufferFl){
+                            return response.arrayBuffer();
+                        } else {
+                            return response.json();
+                        }
+                    }).then(function(data){
+                        var response = {obj: obj};
+                        if (bufferFl){
+                            response.response = data;
+                        } else {
+                            response.response = JSON.stringify(data);
+                        }
+                        resolve(response);
                     }).catch(function (exception) {
                         reject(exception);
                     });
@@ -1442,9 +1451,9 @@ BRAVO.Core = function () {
 
                                 // Resolve the promise
                                 resolve(obj);
-                            }.then(function (exception) {
+                            }, function (exception) {
                                 reject(exception);
-                            }));
+                            });
                         });
                     }
 
