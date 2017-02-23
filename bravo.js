@@ -181,10 +181,30 @@ BRAVO.Core = function () {
                 post: ["deleteObject"]
             },
             // Search Service
+            // TODO: Fix search parsing? 
             "Microsoft.Office.Server.Search.REST.SearchService": {
                 custom: [
-                    { name: "query", "function": function (query) { if (typeof (query) === "string") { return this.executeGet("query?" + query); } query = { request: query }; query.request.__metadata = { type: "Microsoft.Office.Server.Search.REST.SearchRequest" }; return this.executePost("postquery", null, query, true); } },
-                    { name: "querySuggestion", "function": function (query) { return this.executeGet("suggest?" + query); } },
+                    {
+                        name: "query",
+                        "function": function (query) {
+                            if (typeof (query) === "string") {
+                                return this.executeGet("query?" + query);
+                            }
+                            query = {
+                                request: query
+                            };
+                            query.request.__metadata = {
+                                type: "Microsoft.Office.Server.Search.REST.SearchRequest"
+                            };
+                            return this.executePost("postquery", null, query, true);
+                        }
+                    },
+                    { 
+                        name: "querySuggestion", 
+                        "function": function (query) { 
+                            return this.executeGet("suggest?" + query); 
+                        } 
+                    },
                 ]
             },
             // Site
@@ -809,14 +829,14 @@ BRAVO.Core = function () {
                         },
                         true
                     ).then(checkBadResponseStatus).then(function (response) {
-                        if (bufferFl){
+                        if (bufferFl) {
                             return response.arrayBuffer();
                         } else {
                             return response.json();
                         }
-                    }).then(function(data){
-                        var response = {obj: obj};
-                        if (bufferFl){
+                    }).then(function (data) {
+                        var response = { obj: obj };
+                        if (bufferFl) {
                             response.response = data;
                         } else {
                             response.response = JSON.stringify(data);
