@@ -187,8 +187,49 @@ BRAVO.Core = function () {
                     {
                         name: "query",
                         "function": function (query) {
+                            var async = this.asyncFl;
+                            var parseTable = function (result) {
+                                var objects = [];
+                                // Validate that the results object actually exists
+                                var primaryResult = result.d.postquery.PrimaryQueryResult;
+
+                                if (primaryResult &&
+                                    primaryResult.RelevantResults &&
+                                    primaryResult.RelevantResults.Table &&
+                                    primaryResult.RelevantResults.Table.Rows &&
+                                    primaryResult.RelevantResults.Table.Rows.results
+                                ) {
+                                    primaryResult.RelevantResults.Table.Rows.results.forEach(
+                                        function (result) {
+                                            var obj = {}
+                                            result.Cells.results.forEach(
+                                                function (field) {
+                                                    obj[field.Key] = field.Value;
+                                                }
+                                            );
+                                            objects.push(obj);
+                                        }
+                                    );
+                                }
+                                return { results: objects, fullResult: result };
+                            }
+
+                            var parseQueryResults = function (results) {
+                                if (async) {
+                                    return new Promise(function (resolve, reject) {
+                                        results.then(function (result) {
+                                            resolve(parseTable(result));
+                                        }, function (error) {
+                                            reject(error);
+                                        });
+                                    });
+                                } else {
+                                    return parseTable(results);
+                                }
+                            }
+
                             if (typeof (query) === "string") {
-                                return this.executeGet("query?" + query);
+                                return parseQueryResults(this.executeGet("query?" + query));
                             }
                             query = {
                                 request: query
@@ -196,14 +237,14 @@ BRAVO.Core = function () {
                             query.request.__metadata = {
                                 type: "Microsoft.Office.Server.Search.REST.SearchRequest"
                             };
-                            return this.executePost("postquery", null, query, true);
+                            return parseQueryResults(this.executePost("postquery", null, query, true));
                         }
                     },
-                    { 
-                        name: "querySuggestion", 
-                        "function": function (query) { 
-                            return this.executeGet("suggest?" + query); 
-                        } 
+                    {
+                        name: "querySuggestion",
+                        "function": function (query) {
+                            return this.executeGet("suggest?" + query);
+                        }
                     },
                 ]
             },
@@ -824,6 +865,7 @@ BRAVO.Core = function () {
                         {
                             method: method,
                             body: data,
+                            // because SharePoint uses cookies for authentication, same-origin needs to be set in order for the SharePoint request to work properly
                             credentials: "same-origin",
                             headers: fetchHeaders
                         },
