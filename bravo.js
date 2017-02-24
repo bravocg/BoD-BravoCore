@@ -144,26 +144,24 @@ BRAVO.Core = function () {
                         name: "addAttachmentFile",
                         "function": function (file) {
                             var thisObj = this;
-                            return new Promise(
-                                function (resolve, reject) {
-                                    getFileInfo(file).then(
-                                        function (args) {
-                                            var name = args.name,
-                                                buffer = args.buffer;
+                            return new Promise(function (resolve, reject) {
+                                getFileInfo(file).then(function (args) {
+                                    var name = args.name,
+                                        buffer = args.buffer;
 
-                                            if (name && buffer) {
-                                                thisObj.addAttachment(name, buffer).then(
-                                                    function (file) {
-                                                        resolve(file);
-                                                    }
-                                                );
-                                            } else {
-                                                resolve();
-                                            }
-                                        }
-                                    );
-                                }
-                            );
+                                    if (name && buffer) {
+                                        thisObj.addAttachment(name, buffer).then(function (file) {
+                                            resolve(file);
+                                        }).then(function (exception) {
+                                            reject(exception);
+                                        });
+                                    } else {
+                                        resolve();
+                                    }
+                                }, function (exception) {
+                                    reject(exception);
+                                });
+                            });
                         }
                     },
                     {
@@ -183,10 +181,81 @@ BRAVO.Core = function () {
                 post: ["deleteObject"]
             },
             // Search Service
+            // TODO: Fix search parsing? 
             "Microsoft.Office.Server.Search.REST.SearchService": {
                 custom: [
-                    { name: "query", "function": function (query) { if (typeof (query) === "string") { return this.executeGet("query?" + query); } query = { request: query }; query.request.__metadata = { type: "Microsoft.Office.Server.Search.REST.SearchRequest" }; return this.executePost("postquery", null, query, true); } },
-                    { name: "querySuggestion", "function": function (query) { return this.executeGet("suggest?" + query); } },
+                    {
+                        name: "query",
+                        "function": function (query) {
+                            var async = this.asyncFl;
+
+                            // Parse the search result table for primary results
+                            // post - whether or not this was a postquery
+                            // result - the end search result returned from the executeMethods
+                            // returns {
+                            //      results: list of objects from the primary results
+                            //      fullResult: the original result in case more information was needed
+                            // }
+                            var parseTable = function (post, result) {
+                                var objects = [];
+
+                                // a post query has the postquery variable, regular queries have the query variable instead
+                                var primaryResult = post ? result.Response.d.postquery.PrimaryQueryResult : result.Response.d.query.PrimaryQueryResult;
+
+                                // Validate that the results object actually exists
+                                if (primaryResult &&
+                                    primaryResult.RelevantResults &&
+                                    primaryResult.RelevantResults.Table &&
+                                    primaryResult.RelevantResults.Table.Rows &&
+                                    primaryResult.RelevantResults.Table.Rows.results
+                                ) {
+                                    primaryResult.RelevantResults.Table.Rows.results.forEach(
+                                        function (result) {
+                                            var obj = {}
+                                            result.Cells.results.forEach(
+                                                function (field) {
+                                                    obj[field.Key] = field.Value;
+                                                }
+                                            );
+                                            objects.push(obj);
+                                        }
+                                    );
+                                }
+                                return { results: objects, fullResult: result };
+                            }
+
+                            var parseQueryResults = function (post, results) {
+                                if (async) {
+                                    return new Promise(function (resolve, reject) {
+                                        results.then(function (result) {
+                                            resolve(parseTable(post, result));
+                                        }, function (error) {
+                                            reject(error);
+                                        });
+                                    });
+                                } else {
+                                    return parseTable(post, results);
+                                }
+                            }
+
+                            if (typeof (query) === "string") {
+                                return parseQueryResults(false, this.executeGet("query?" + query));
+                            }
+                            query = {
+                                request: query
+                            };
+                            query.request.__metadata = {
+                                type: "Microsoft.Office.Server.Search.REST.SearchRequest"
+                            };
+                            return parseQueryResults(true, this.executePost("postquery", null, query, true));
+                        }
+                    },
+                    {
+                        name: "querySuggestion",
+                        "function": function (query) {
+                            return this.executeGet("suggest?" + query);
+                        }
+                    },
                 ]
             },
             // Site
@@ -350,10 +419,10 @@ BRAVO.Core = function () {
                         name: "addFile",
                         "function": function (file) {
                             var thisObj = this;
-                            return new Promise(function(resolve, reject){
+                            return new Promise(function (resolve, reject) {
                                 getFileInfo(file).then(function (args) {
-                                    var name = args.name, 
-                                    buffer = args.buffer;
+                                    var name = args.name,
+                                        buffer = args.buffer;
                                     if (name && buffer) {
                                         thisObj.add(name, buffer).then(function (file) {
                                             resolve(file);
@@ -361,6 +430,8 @@ BRAVO.Core = function () {
                                     } else {
                                         resolve();
                                     }
+                                }, function (exception) {
+                                    reject(exception);
                                 });
                             });
                         }
@@ -714,14 +785,14 @@ BRAVO.Core = function () {
             return new Promise(
                 function (resolve, reject) {
                     // Execute the request
-                    executeMethod(this, methodType, metadataType, funcName, data, headers).then(
-                        function (args) {
-                            var obj = args.obj,
-                                response = args.response;
-                            // Process the response and resolve the promise
-                            resolve(processRequest(obj, response));
-                        }
-                    );
+                    executeMethod(this, methodType, metadataType, funcName, data, headers).then(function (args) {
+                        var obj = args.obj,
+                            response = args.response;
+                        // Process the response and resolve the promise
+                        resolve(processRequest(obj, response));
+                    }, function (exception) {
+                        reject(exception);
+                    });
                 }
             );
         }
@@ -732,6 +803,42 @@ BRAVO.Core = function () {
         // Process the request and return it
         return processRequest(this, response);
     };
+
+    // Check Fetch Errors
+    // Checks responses for error messages
+    // response - This will be the response object returned by the fetch request
+    // Will throw an error that can be caught and handled downstream
+    var checkBadResponseStatus = function (response) {
+        if (response.status >= 200 && response.status < 300) {
+            return response;
+        } else {
+            var error = new Error(response.statusText)
+            error.response = response;
+            throw error;
+        }
+    };
+
+    // Create Fetch Headers
+    // This will create a headers object for our async fetch requests
+    // obj - This object.
+    // headers - Additional headers to add to the xml http request.
+    var getFetchHeadersObject = function (obj, defaultHeaders, headers) {
+        // setup headers object
+        var fetchHeaders = new Headers();
+        defaultHeaders.forEach(function (header) {
+            fetchHeaders.set(header.key, header.value);
+        });
+
+        // See if the headers exist
+        if (headers) {
+            // Parse the headers
+            for (var header in headers) {
+                // Add the header
+                fetchHeaders.set(header, headers[header]);
+            }
+        }
+        return fetchHeaders;
+    }
 
     // Execute Request
     // This method will execute a REST url request and return the json result.
@@ -744,84 +851,79 @@ BRAVO.Core = function () {
     var executeRequest = function (obj, url, method, data, headers, bufferFl) {
         // Ensure the url exists
         if (url) {
-            var xhr = getXmlHttpRequest();
-
             // Ensure the method is set
-            method = method ? method : "GET";
-
-            // Open the request
-            xhr.open(method == "GET" ? "GET" : "POST", url, obj.asyncFl || bufferFl ? true : false);
-
-            // See if we are returning an array buffer
-            if (bufferFl) {
-                return new Promise(
-                    function (resolve, reject) {
-                        // Set the response type
-                        xhr.responseType = "arraybuffer";
-
-                        // Set the state change event
-                        xhr.onreadystatechange = function () {
-                            // See if the request has finished
-                            if (xhr.readyState == 4) {
-                                // Resolve the promise
-                                resolve({
-                                    obj: obj,
-                                    response: xhr.response
-                                });
-                            }
-                        }
-
-                        // Execute the request
-                        xhr.send();
-                    }
-                );
-            }
-
-            // Set the default headers
-            xhr.setRequestHeader("Accept", "application/json;odata=verbose");
-            xhr.setRequestHeader("Content-Type", "application/json;odata=verbose");
-            xhr.setRequestHeader("X-HTTP-Method", method);
-            xhr.setRequestHeader("X-RequestDigest", document.querySelector("#__REQUESTDIGEST").value);
-
-            // See if the headers exist
-            if (headers) {
-                // Parse the headers
-                for (var header in headers) {
-                    // Add the header
-                    xhr.setRequestHeader(header, headers[header]);
-                }
-            }
+            // TODO: Does sharepoint not allow for PUT or DELETE?
+            method = method === "GET" ? "GET" : "POST";
 
             // Stringify the data for the response
             data = data ? (data.byteLength ? data : JSON.stringify(data)) : null;
 
-            // See if we are making an aysnchronous request
-            if (obj.asyncFl) {
-                return new Promise(
-                    function (resolve, reject) {
-                        // Set the state change event
-                        xhr.onreadystatechange = function () {
-                            // See if the request has finished
-                            if (xhr.readyState == 4) {
-                                // Resolve the promise
-                                resolve({
-                                    obj: obj,
-                                    response: xhr.response
-                                });
-                            }
+            // setup default headers values
+            var defaultHeaders = [
+                { key: "Accept", value: "application/json;odata=verbose;charset=utf-8" },
+                { key: "Content-Type", value: "application/json;odata=verbose" },
+                { key: "X-HTTP-Method", value: method },
+                { key: "X-RequestDigest", value: document.querySelector("#__REQUESTDIGEST").value },
+            ];
+
+            if (bufferFl || obj.asyncFl) {
+                var fetchHeaders = getFetchHeadersObject(obj, defaultHeaders, headers);
+
+                return new Promise(function (resolve, reject) {
+                    fetch(
+                        url,
+                        {
+                            method: method,
+                            body: data,
+                            // because SharePoint uses cookies for authentication, same-origin needs to be set in order for the SharePoint request to work properly
+                            credentials: "same-origin",
+                            headers: fetchHeaders
+                        },
+                        true
+                    ).then(checkBadResponseStatus).then(function (response) {
+                        if (bufferFl) {
+                            return response.arrayBuffer();
+                        } else {
+                            return response.json();
                         }
+                    }).then(function (data) {
+                        var response = { obj: obj };
+                        if (bufferFl) {
+                            response.response = data;
+                        } else {
+                            response.response = JSON.stringify(data);
+                        }
+                        resolve(response);
+                    }).catch(function (exception) {
+                        reject(exception);
+                    });
+                });
+            } else {
+                // Because fetch does not allow for synchronous requests, this is being kept for legacy purposes
+                var xhr = getXmlHttpRequest();
 
-                        // Execute the request
-                        xhr.send(data);
+                // Open the request
+                xhr.open(method, url, obj.asyncFl || bufferFl ? true : false);
+
+                defaultHeaders.forEach(function (header) {
+                    xhr.setRequestHeader(header.key, header.value);
+                });
+
+                // See if the headers exist
+                if (headers) {
+                    // Parse the headers
+                    for (var header in headers) {
+                        // Add the header
+                        xhr.setRequestHeader(header, headers[header]);
                     }
-                );
+                }
+
+                // Execute the request
+                xhr.send(data);
+
+                // Return the response
+                return xhr.response;
             }
-
-            // Execute the request
-            xhr.send(data);
-
-            // Return the response
-            return xhr.response;
         }
     };
 
@@ -851,7 +953,7 @@ BRAVO.Core = function () {
     // file - An input element w/ its type set to 'file'.
     var getFileInfo = function (file) {
         return new Promise(
-            function (resolve, reject) {
+            function (resolve) {
                 // Set the file
                 file = file.files && file.files.length > 0 ? file.files[0] : file;
 
@@ -1143,6 +1245,8 @@ BRAVO.Core = function () {
 
                         // Resolve the promise
                         resolve(obj);
+                    }, function (exception) {
+                        reject(exception);
                     });
                 }
             );
@@ -1204,6 +1308,8 @@ BRAVO.Core = function () {
                                 response = args.response;
                             // Resolve the promise
                             resolve(postRequest(obj, response));
+                        }, function (exception) {
+                            reject(exception)
                         });
                     }
                 );
@@ -1408,7 +1514,7 @@ BRAVO.Core = function () {
                             // Execute the request
                             executeRequest(obj, obj.RequestUrl, methodType).then(function (args) {
                                 var obj = args.obj,
-                                response = args.response;
+                                    response = args.response;
                                 // Set the response
                                 obj.Response = JSON.parse(response);
 
@@ -1417,6 +1523,8 @@ BRAVO.Core = function () {
 
                                 // Resolve the promise
                                 resolve(obj);
+                            }, function (exception) {
+                                reject(exception);
                             });
                         });
                     }
