@@ -188,11 +188,21 @@ BRAVO.Core = function () {
                         name: "query",
                         "function": function (query) {
                             var async = this.asyncFl;
-                            var parseTable = function (result) {
-                                var objects = [];
-                                // Validate that the results object actually exists
-                                var primaryResult = result.d.postquery.PrimaryQueryResult;
 
+                            // Parse the search result table for primary results
+                            // post - whether or not this was a postquery
+                            // result - the end search result returned from the executeMethods
+                            // returns {
+                            //      results: list of objects from the primary results
+                            //      fullResult: the original result in case more information was needed
+                            // }
+                            var parseTable = function (post, result) {
+                                var objects = [];
+
+                                // a post query has the postquery variable, regular queries have the query variable instead
+                                var primaryResult = post ? result.Response.d.postquery.PrimaryQueryResult : result.Response.d.query.PrimaryQueryResult;
+
+                                // Validate that the results object actually exists
                                 if (primaryResult &&
                                     primaryResult.RelevantResults &&
                                     primaryResult.RelevantResults.Table &&
@@ -214,22 +224,22 @@ BRAVO.Core = function () {
                                 return { results: objects, fullResult: result };
                             }
 
-                            var parseQueryResults = function (results) {
+                            var parseQueryResults = function (post, results) {
                                 if (async) {
                                     return new Promise(function (resolve, reject) {
                                         results.then(function (result) {
-                                            resolve(parseTable(result));
+                                            resolve(parseTable(post, result));
                                         }, function (error) {
                                             reject(error);
                                         });
                                     });
                                 } else {
-                                    return parseTable(results);
+                                    return parseTable(post, results);
                                 }
                             }
 
                             if (typeof (query) === "string") {
-                                return parseQueryResults(this.executeGet("query?" + query));
+                                return parseQueryResults(false, this.executeGet("query?" + query));
                             }
                             query = {
                                 request: query
@@ -237,7 +247,7 @@ BRAVO.Core = function () {
                             query.request.__metadata = {
                                 type: "Microsoft.Office.Server.Search.REST.SearchRequest"
                             };
-                            return parseQueryResults(this.executePost("postquery", null, query, true));
+                            return parseQueryResults(true, this.executePost("postquery", null, query, true));
                         }
                     },
                     {
