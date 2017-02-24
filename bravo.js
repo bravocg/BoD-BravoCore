@@ -134,9 +134,42 @@ BRAVO.Core = function () {
                 post: ["breakRoleInheritance", "deleteObject", "recycle", "resetRoleInheritance"],
                 postDataInBodyNoArgs: ["validateUpdateListItem"],
                 custom: [
-                    { name: "addAttachment", "function": function (fileName, content) { return this.executePost("attachmentfiles/add", { FileName: fileName }, content, true); } },
-                    { name: "addAttachmentFile", "function": function (file) { var thisObj = this; var promise = new BRAVO.Core.Promise(); getFileInfo(file).done(function (name, buffer) { if (name && buffer) { thisObj.addAttachment(name, buffer).done(function (file) { promise.resolve(file); }); } else { promise.resolve(); } }); return promise; } },
-                    { name: "update", "function": function (data) { return this.executePost(null, null, data, true, this.__metadata.type, "MERGE"); } }
+                    {
+                        name: "addAttachment",
+                        "function": function (fileName, content) {
+                            return this.executePost("attachmentfiles/add", { FileName: fileName }, content, true);
+                        }
+                    },
+                    {
+                        name: "addAttachmentFile",
+                        "function": function (file) {
+                            var thisObj = this;
+                            return new Promise(function (resolve, reject) {
+                                getFileInfo(file).then(function (args) {
+                                    var name = args.name,
+                                        buffer = args.buffer;
+
+                                    if (name && buffer) {
+                                        thisObj.addAttachment(name, buffer).then(function (file) {
+                                            resolve(file);
+                                        }).then(function (exception) {
+                                            reject(exception);
+                                        });
+                                    } else {
+                                        resolve();
+                                    }
+                                }, function (exception) {
+                                    reject(exception);
+                                });
+                            });
+                        }
+                    },
+                    {
+                        name: "update",
+                        "function": function (data) {
+                            return this.executePost(null, null, data, true, this.__metadata.type, "MERGE");
+                        }
+                    }
                 ]
             },
             // Role Assignment
@@ -148,10 +181,81 @@ BRAVO.Core = function () {
                 post: ["deleteObject"]
             },
             // Search Service
+            // TODO: Fix search parsing? 
             "Microsoft.Office.Server.Search.REST.SearchService": {
                 custom: [
-                    { name: "query", "function": function (query) { if (typeof (query) === "string") { return this.executeGet("query?" + query); } query = { request: query }; query.request.__metadata = { type: "Microsoft.Office.Server.Search.REST.SearchRequest" }; return this.executePost("postquery", null, query, true); } },
-                    { name: "querySuggestion", "function": function (query) { return this.executeGet("suggest?" + query); } },
+                    {
+                        name: "query",
+                        "function": function (query) {
+                            var async = this.asyncFl;
+
+                            // Parse the search result table for primary results
+                            // post - whether or not this was a postquery
+                            // result - the end search result returned from the executeMethods
+                            // returns {
+                            //      results: list of objects from the primary results
+                            //      fullResult: the original result in case more information was needed
+                            // }
+                            var parseTable = function (post, result) {
+                                var objects = [];
+
+                                // a post query has the postquery variable, regular queries have the query variable instead
+                                var primaryResult = post ? result.Response.d.postquery.PrimaryQueryResult : result.Response.d.query.PrimaryQueryResult;
+
+                                // Validate that the results object actually exists
+                                if (primaryResult &&
+                                    primaryResult.RelevantResults &&
+                                    primaryResult.RelevantResults.Table &&
+                                    primaryResult.RelevantResults.Table.Rows &&
+                                    primaryResult.RelevantResults.Table.Rows.results
+                                ) {
+                                    primaryResult.RelevantResults.Table.Rows.results.forEach(
+                                        function (result) {
+                                            var obj = {}
+                                            result.Cells.results.forEach(
+                                                function (field) {
+                                                    obj[field.Key] = field.Value;
+                                                }
+                                            );
+                                            objects.push(obj);
+                                        }
+                                    );
+                                }
+                                return { results: objects, fullResult: result };
+                            }
+
+                            var parseQueryResults = function (post, results) {
+                                if (async) {
+                                    return new Promise(function (resolve, reject) {
+                                        results.then(function (result) {
+                                            resolve(parseTable(post, result));
+                                        }, function (error) {
+                                            reject(error);
+                                        });
+                                    });
+                                } else {
+                                    return parseTable(post, results);
+                                }
+                            }
+
+                            if (typeof (query) === "string") {
+                                return parseQueryResults(false, this.executeGet("query?" + query));
+                            }
+                            query = {
+                                request: query
+                            };
+                            query.request.__metadata = {
+                                type: "Microsoft.Office.Server.Search.REST.SearchRequest"
+                            };
+                            return parseQueryResults(true, this.executePost("postquery", null, query, true));
+                        }
+                    },
+                    {
+                        name: "querySuggestion",
+                        "function": function (query) {
+                            return this.executeGet("suggest?" + query);
+                        }
+                    },
                 ]
             },
             // Site
@@ -305,8 +409,33 @@ BRAVO.Core = function () {
             // Attachment Files
             "attachmentfiles": {
                 custom: [
-                    { name: "add", "function": function (fileName, content) { return this.executePost("add", { FileName: fileName }, content, true); } },
-                    { name: "addFile", "function": function (file) { var thisObj = this; var promise = new BRAVO.Core.Promise(); getFileInfo(file).done(function (name, buffer) { if (name && buffer) { thisObj.add(name, buffer).done(function (file) { promise.resolve(file); }); } else { promise.resolve(); } }); return promise; } },
+                    {
+                        name: "add",
+                        "function": function (fileName, content) {
+                            return this.executePost("add", { FileName: fileName }, content, true);
+                        }
+                    },
+                    {
+                        name: "addFile",
+                        "function": function (file) {
+                            var thisObj = this;
+                            return new Promise(function (resolve, reject) {
+                                getFileInfo(file).then(function (args) {
+                                    var name = args.name,
+                                        buffer = args.buffer;
+                                    if (name && buffer) {
+                                        thisObj.add(name, buffer).then(function (file) {
+                                            resolve(file);
+                                        });
+                                    } else {
+                                        resolve();
+                                    }
+                                }, function (exception) {
+                                    reject(exception);
+                                });
+                            });
+                        }
+                    },
                 ]
             },
             // Content Type Collection
@@ -653,16 +782,19 @@ BRAVO.Core = function () {
 
         // See if we are making an asynchronous request
         if (this.asyncFl) {
-            var promise = new BRAVO.Core.Promise();
-
-            // Execute the request
-            executeMethod(this, methodType, metadataType, funcName, data, headers).done(function (obj, response) {
-                // Process the response and resolve the promise
-                promise.resolve(processRequest(obj, response));
-            });
-
-            // Return the promise
-            return promise;
+            return new Promise(
+                function (resolve, reject) {
+                    // Execute the request
+                    executeMethod(this, methodType, metadataType, funcName, data, headers).then(function (args) {
+                        var obj = args.obj,
+                            response = args.response;
+                        // Process the response and resolve the promise
+                        resolve(processRequest(obj, response));
+                    }, function (exception) {
+                        reject(exception);
+                    });
+                }
+            );
         }
 
         // Execute the request
@@ -671,6 +803,42 @@ BRAVO.Core = function () {
         // Process the request and return it
         return processRequest(this, response);
     };
+
+    // Check Fetch Errors
+    // Checks responses for error messages
+    // response - This will be the response object returned by the fetch request
+    // Will throw an error that can be caught and handled downstream
+    var checkBadResponseStatus = function (response) {
+        if (response.status >= 200 && response.status < 300) {
+            return response;
+        } else {
+            var error = new Error(response.statusText)
+            error.response = response;
+            throw error;
+        }
+    };
+
+    // Create Fetch Headers
+    // This will create a headers object for our async fetch requests
+    // obj - This object.
+    // headers - Additional headers to add to the xml http request.
+    var getFetchHeadersObject = function (obj, defaultHeaders, headers) {
+        // setup headers object
+        var fetchHeaders = new Headers();
+        defaultHeaders.forEach(function (header) {
+            fetchHeaders.set(header.key, header.value);
+        });
+
+        // See if the headers exist
+        if (headers) {
+            // Parse the headers
+            for (var header in headers) {
+                // Add the header
+                fetchHeaders.set(header, headers[header]);
+            }
+        }
+        return fetchHeaders;
+    }
 
     // Execute Request
     // This method will execute a REST url request and return the json result.
@@ -683,80 +851,79 @@ BRAVO.Core = function () {
     var executeRequest = function (obj, url, method, data, headers, bufferFl) {
         // Ensure the url exists
         if (url) {
-            var xhr = getXmlHttpRequest();
-
             // Ensure the method is set
-            method = method ? method : "GET";
-
-            // Open the request
-            xhr.open(method == "GET" ? "GET" : "POST", url, obj.asyncFl || bufferFl ? true : false);
-
-            // See if we are returning an array buffer
-            if (bufferFl) {
-                var promise = new BRAVO.Core.Promise();
-
-                // Set the response type
-                xhr.responseType = "arraybuffer";
-
-                // Set the state change event
-                xhr.onreadystatechange = function () {
-                    // See if the request has finished
-                    if (xhr.readyState == 4) {
-                        // Resolve the promise
-                        promise.resolve(obj, xhr.response);
-                    }
-                }
-
-                // Execute the request
-                xhr.send();
-
-                // Return the promise
-                return promise;
-            }
-
-            // Set the default headers
-            xhr.setRequestHeader("Accept", "application/json;odata=verbose");
-            xhr.setRequestHeader("Content-Type", "application/json;odata=verbose");
-            xhr.setRequestHeader("X-HTTP-Method", method);
-            xhr.setRequestHeader("X-RequestDigest", document.querySelector("#__REQUESTDIGEST").value);
-
-            // See if the headers exist
-            if (headers) {
-                // Parse the headers
-                for (var header in headers) {
-                    // Add the header
-                    xhr.setRequestHeader(header, headers[header]);
-                }
-            }
+            // TODO: Does sharepoint not allow for PUT or DELETE?
+            method = method === "GET" ? "GET" : "POST";
 
             // Stringify the data for the response
             data = data ? (data.byteLength ? data : JSON.stringify(data)) : null;
 
-            // See if we are making an aysnchronous request
-            if (obj.asyncFl) {
-                var promise = new BRAVO.Core.Promise();
+            // setup default headers values
+            var defaultHeaders = [
+                { key: "Accept", value: "application/json;odata=verbose;charset=utf-8" },
+                { key: "Content-Type", value: "application/json;odata=verbose" },
+                { key: "X-HTTP-Method", value: method },
+                { key: "X-RequestDigest", value: document.querySelector("#__REQUESTDIGEST").value },
+            ];
 
-                // Set the state change event
-                xhr.onreadystatechange = function () {
-                    // See if the request has finished
-                    if (xhr.readyState == 4) {
-                        // Resolve the promise
-                        promise.resolve(obj, xhr.response);
+            if (bufferFl || obj.asyncFl) {
+                var fetchHeaders = getFetchHeadersObject(obj, defaultHeaders, headers);
+
+                return new Promise(function (resolve, reject) {
+                    fetch(
+                        url,
+                        {
+                            method: method,
+                            body: data,
+                            // because SharePoint uses cookies for authentication, same-origin needs to be set in order for the SharePoint request to work properly
+                            credentials: "same-origin",
+                            headers: fetchHeaders
+                        },
+                        true
+                    ).then(checkBadResponseStatus).then(function (response) {
+                        if (bufferFl) {
+                            return response.arrayBuffer();
+                        } else {
+                            return response.json();
+                        }
+                    }).then(function (data) {
+                        var response = { obj: obj };
+                        if (bufferFl) {
+                            response.response = data;
+                        } else {
+                            response.response = JSON.stringify(data);
+                        }
+                        resolve(response);
+                    }).catch(function (exception) {
+                        reject(exception);
+                    });
+                });
+            } else {
+                // Because fetch does not allow for synchronous requests, this is being kept for legacy purposes
+                var xhr = getXmlHttpRequest();
+
+                // Open the request
+                xhr.open(method, url, obj.asyncFl || bufferFl ? true : false);
+
+                defaultHeaders.forEach(function (header) {
+                    xhr.setRequestHeader(header.key, header.value);
+                });
+
+                // See if the headers exist
+                if (headers) {
+                    // Parse the headers
+                    for (var header in headers) {
+                        // Add the header
+                        xhr.setRequestHeader(header, headers[header]);
                     }
                 }
 
                 // Execute the request
                 xhr.send(data);
 
-                // Return the promise
-                return promise;
+                // Return the response
+                return xhr.response;
             }
-
-            // Execute the request
-            xhr.send(data);
-
-            // Return the response
-            return xhr.response;
         }
     };
 
@@ -785,43 +952,45 @@ BRAVO.Core = function () {
     // Method to get the file information.
     // file - An input element w/ its type set to 'file'.
     var getFileInfo = function (file) {
-        var promise = new BRAVO.Core.Promise();
+        return new Promise(
+            function (resolve) {
+                // Set the file
+                file = file.files && file.files.length > 0 ? file.files[0] : file;
 
-        // Set the file
-        file = file.files && file.files.length > 0 ? file.files[0] : file;
+                // Ensure the file exists
+                if (file && file.name) {
+                    // Create a file reader
+                    var reader = FileReader ? new FileReader() : null;
+                    if (reader) {
+                        // Event triggered after the file is read successfully
+                        reader.onloadend = function (e) {
+                            // Resolve the promise
+                            resolve({
+                                name: file.name,
+                                buffer: e.target.result
+                            });
+                        }
 
-        // Ensure the file exists
-        if (file && file.name) {
-            // Create a file reader
-            var reader = FileReader ? new FileReader() : null;
-            if (reader) {
-                // Event triggered after the file is read successfully
-                reader.onloadend = function (e) {
-                    // Resolve the promise
-                    promise.resolve(file.name, e.target.result);
+                        // Event triggered on error
+                        reader.onerror = function (e) {
+                            // Resolve the promise
+                            resolve(e.target.error);
+                        }
+
+                        // Read the file as an array buffer
+                        reader.readAsArrayBuffer(file);
+                    }
+                    else {
+                        // Resolve the promise
+                        resolve();
+                    }
                 }
-
-                // Event triggered on error
-                reader.onerror = function (e) {
+                else {
                     // Resolve the promise
-                    promise.resolve(e.target.error);
+                    resolve();
                 }
-
-                // Read the file as an array buffer
-                reader.readAsArrayBuffer(file);
             }
-            else {
-                // Resolve the promise
-                promise.resolve();
-            }
-        }
-        else {
-            // Resolve the promise
-            promise.resolve();
-        }
-
-        // Return the promise
-        return promise;
+        );
     }
 
     // Get Query String Value
@@ -1062,22 +1231,25 @@ BRAVO.Core = function () {
 
         // See if we are making an asynchronous request
         if (obj.asyncFl) {
-            var promise = new BRAVO.Core.Promise();
+            return new Promise(
+                function (resolve, reject) {
+                    // Execute the request
+                    executeRequest(obj, obj.RequestUrl).then(function (args) {
+                        var obj = args.obj,
+                            response = args.response;
+                        // Set the response
+                        obj.Response = JSON.parse(response);
 
-            // Execute the request
-            executeRequest(obj, obj.RequestUrl).done(function (obj, response) {
-                // Set the response
-                obj.Response = JSON.parse(response);
+                        // Update the properties
+                        updateProperties(obj, obj.Response.d);
 
-                // Update the properties
-                updateProperties(obj, obj.Response.d);
-
-                // Resolve the promise
-                promise.resolve(obj);
-            });
-
-            // Return the promise
-            return promise;
+                        // Resolve the promise
+                        resolve(obj);
+                    }, function (exception) {
+                        reject(exception);
+                    });
+                }
+            );
         }
 
         // Execute the request
@@ -1095,12 +1267,14 @@ BRAVO.Core = function () {
     // name - The name of the property.
     // value - The value to set the property to.
     var setProperty = function (name, value) {
-        var promise = new BRAVO.Core.Promise();
+        var promise;
 
         // Ensure the value exists, and determine if an update is required
         if (value === undefined && this[name] != null && this[name] == value) {
             // Resolve the promise
-            promise.resolve(this[name] == value);
+            promise = new Promise(function (resolve) {
+                resolve(true);
+            });
         }
         else {
             // Create the data to update the property
@@ -1121,17 +1295,24 @@ BRAVO.Core = function () {
                 return false;
             };
 
-
             // Execute the request
             var response = executeMethod(this, "MERGE", this.__metadata.type, null, JSON.parse(data), { "IF-MATCH": "*" });
 
             // See if this is an asynchronous request
-            if (response.done) {
+            if (response.then) {
                 // Wait for the response to complete
-                response.done(function (obj, response) {
-                    // Resolve the promise
-                    promise.resolve(postRequest(obj, response));
-                });
+                promise = new Promise(
+                    function (resolve) {
+                        response.then(function (args) {
+                            var obj = args.obj,
+                                response = args.response;
+                            // Resolve the promise
+                            resolve(postRequest(obj, response));
+                        }, function (exception) {
+                            reject(exception)
+                        });
+                    }
+                );
             }
             else {
                 return postRequest(this, response);
@@ -1258,7 +1439,7 @@ BRAVO.Core = function () {
                     // Generate the method
                     obj["get_" + propName] = new Function("return new BRAVO.Core.Object(\"" + uriInfo.url + "\", \"" + uriInfo.endPoint + "\", this.asyncFl);");
                 }
-                    // Else, add the property
+                // Else, add the property
                 else { obj[propName] = data[propName]; }
             }
 
@@ -1329,22 +1510,23 @@ BRAVO.Core = function () {
 
                     // See if we are making an asynchronous request
                     if (obj.asyncFl) {
-                        var promise = new BRAVO.Core.Promise();
+                        return new Promise(function (resolve, reject) {
+                            // Execute the request
+                            executeRequest(obj, obj.RequestUrl, methodType).then(function (args) {
+                                var obj = args.obj,
+                                    response = args.response;
+                                // Set the response
+                                obj.Response = JSON.parse(response);
 
-                        // Execute the request
-                        executeRequest(obj, obj.RequestUrl, methodType).done(function (obj, response) {
-                            // Set the response
-                            obj.Response = JSON.parse(response);
+                                // Update the properties
+                                updateProperties(obj, obj.Response.d);
 
-                            // Update the properties
-                            updateProperties(obj, obj.Response.d);
-
-                            // Resolve the promise
-                            promise.resolve(obj);
+                                // Resolve the promise
+                                resolve(obj);
+                            }, function (exception) {
+                                reject(exception);
+                            });
                         });
-
-                        // Return the promise
-                        return promise;
                     }
 
                     // Execute the request
@@ -1360,15 +1542,15 @@ BRAVO.Core = function () {
         },
 
         // Promise
-        Promise: function () {
-            return {
-                _arguments: null,
-                _callback: null,
-                _resolveFl: false,
-                done: function (callback) { this._callback = callback; if (this._callback && this._resolveFl) { this._callback.apply(this, this._arguments); } },
-                resolve: function () { this._arguments = arguments; this._resolveFl = true; if (this._callback) { this._callback.apply(this, this._arguments); } }
-            };
-        },
+        // Promise: function () {
+        //     return {
+        //         _arguments: null,
+        //         _callback: null,
+        //         _resolveFl: false,
+        //         done: function (callback) { this._callback = callback; if (this._callback && this._resolveFl) { this._callback.apply(this, this._arguments); } },
+        //         resolve: function () { this._arguments = arguments; this._resolveFl = true; if (this._callback) { this._callback.apply(this, this._arguments); } }
+        //     };
+        // },
 
         // **********************************************************************************
         // SP Objects
@@ -3466,7 +3648,7 @@ BRAVO.ModalDialog = function () {
         if (dialogResult == SP.UI.DialogResult.OK) {
             // See if the return value is a url
             if (returnVal && typeof (returnVal) === "string" &&
-               (returnVal.toLowerCase().indexOf("http") == 0 || returnVal.indexOf("/") == 0)) {
+                (returnVal.toLowerCase().indexOf("http") == 0 || returnVal.indexOf("/") == 0)) {
                 // Redirect to the url
                 document.location.href = returnVal;
             }
@@ -3562,3 +3744,808 @@ BRAVO.Init = function () {
 document.write("<script type='text/javascript'>(function() { BRAVO.Init(); })();</script>");
 
 /* Bravo Core Library v1.7.6 | (c) Bravo Consulting Group, LLC (Bravo) | bravocg.com */
+
+// Promise Polyfill to provide access to promises for browsers without it implemented
+// Taken from https://github.com/taylorhakes/promise-polyfill
+(function (root) {
+
+    // Store setTimeout reference so promise-polyfill will be unaffected by
+    // other code modifying setTimeout (like sinon.useFakeTimers())
+    var setTimeoutFunc = setTimeout;
+
+    function noop() { }
+
+    // Polyfill for Function.prototype.bind
+    function bind(fn, thisArg) {
+        return function () {
+            fn.apply(thisArg, arguments);
+        };
+    }
+
+    function Promise(fn) {
+        if (typeof this !== 'object') throw new TypeError('Promises must be constructed via new');
+        if (typeof fn !== 'function') throw new TypeError('not a function');
+        this._state = 0;
+        this._handled = false;
+        this._value = undefined;
+        this._deferreds = [];
+
+        doResolve(fn, this);
+    }
+
+    function handle(self, deferred) {
+        while (self._state === 3) {
+            self = self._value;
+        }
+        if (self._state === 0) {
+            self._deferreds.push(deferred);
+            return;
+        }
+        self._handled = true;
+        Promise._immediateFn(function () {
+            var cb = self._state === 1 ? deferred.onFulfilled : deferred.onRejected;
+            if (cb === null) {
+                (self._state === 1 ? resolve : reject)(deferred.promise, self._value);
+                return;
+            }
+            var ret;
+            try {
+                ret = cb(self._value);
+            } catch (e) {
+                reject(deferred.promise, e);
+                return;
+            }
+            resolve(deferred.promise, ret);
+        });
+    }
+
+    function resolve(self, newValue) {
+        try {
+            // Promise Resolution Procedure: https://github.com/promises-aplus/promises-spec#the-promise-resolution-procedure
+            if (newValue === self) throw new TypeError('A promise cannot be resolved with itself.');
+            if (newValue && (typeof newValue === 'object' || typeof newValue === 'function')) {
+                var then = newValue.then;
+                if (newValue instanceof Promise) {
+                    self._state = 3;
+                    self._value = newValue;
+                    finale(self);
+                    return;
+                } else if (typeof then === 'function') {
+                    doResolve(bind(then, newValue), self);
+                    return;
+                }
+            }
+            self._state = 1;
+            self._value = newValue;
+            finale(self);
+        } catch (e) {
+            reject(self, e);
+        }
+    }
+
+    function reject(self, newValue) {
+        self._state = 2;
+        self._value = newValue;
+        finale(self);
+    }
+
+    function finale(self) {
+        if (self._state === 2 && self._deferreds.length === 0) {
+            Promise._immediateFn(function () {
+                if (!self._handled) {
+                    Promise._unhandledRejectionFn(self._value);
+                }
+            });
+        }
+
+        for (var i = 0, len = self._deferreds.length; i < len; i++) {
+            handle(self, self._deferreds[i]);
+        }
+        self._deferreds = null;
+    }
+
+    function Handler(onFulfilled, onRejected, promise) {
+        this.onFulfilled = typeof onFulfilled === 'function' ? onFulfilled : null;
+        this.onRejected = typeof onRejected === 'function' ? onRejected : null;
+        this.promise = promise;
+    }
+
+    /**
+     * Take a potentially misbehaving resolver function and make sure
+     * onFulfilled and onRejected are only called once.
+     *
+     * Makes no guarantees about asynchrony.
+     */
+    function doResolve(fn, self) {
+        var done = false;
+        try {
+            fn(function (value) {
+                if (done) return;
+                done = true;
+                resolve(self, value);
+            }, function (reason) {
+                if (done) return;
+                done = true;
+                reject(self, reason);
+            });
+        } catch (ex) {
+            if (done) return;
+            done = true;
+            reject(self, ex);
+        }
+    }
+
+    Promise.prototype['catch'] = function (onRejected) {
+        return this.then(null, onRejected);
+    };
+
+    Promise.prototype.then = function (onFulfilled, onRejected) {
+        var prom = new (this.constructor)(noop);
+
+        handle(this, new Handler(onFulfilled, onRejected, prom));
+        return prom;
+    };
+
+    Promise.all = function (arr) {
+        var args = Array.prototype.slice.call(arr);
+
+        return new Promise(function (resolve, reject) {
+            if (args.length === 0) return resolve([]);
+            var remaining = args.length;
+
+            function res(i, val) {
+                try {
+                    if (val && (typeof val === 'object' || typeof val === 'function')) {
+                        var then = val.then;
+                        if (typeof then === 'function') {
+                            then.call(val, function (val) {
+                                res(i, val);
+                            }, reject);
+                            return;
+                        }
+                    }
+                    args[i] = val;
+                    if (--remaining === 0) {
+                        resolve(args);
+                    }
+                } catch (ex) {
+                    reject(ex);
+                }
+            }
+
+            for (var i = 0; i < args.length; i++) {
+                res(i, args[i]);
+            }
+        });
+    };
+
+    Promise.resolve = function (value) {
+        if (value && typeof value === 'object' && value.constructor === Promise) {
+            return value;
+        }
+
+        return new Promise(function (resolve) {
+            resolve(value);
+        });
+    };
+
+    Promise.reject = function (value) {
+        return new Promise(function (resolve, reject) {
+            reject(value);
+        });
+    };
+
+    Promise.race = function (values) {
+        return new Promise(function (resolve, reject) {
+            for (var i = 0, len = values.length; i < len; i++) {
+                values[i].then(resolve, reject);
+            }
+        });
+    };
+
+    // Use polyfill for setImmediate for performance gains
+    Promise._immediateFn = (typeof setImmediate === 'function' && function (fn) { setImmediate(fn); }) ||
+        function (fn) {
+            setTimeoutFunc(fn, 0);
+        };
+
+    Promise._unhandledRejectionFn = function _unhandledRejectionFn(err) {
+        if (typeof console !== 'undefined' && console) {
+            console.warn('Possible Unhandled Promise Rejection:', err); // eslint-disable-line no-console
+        }
+    };
+
+    /**
+     * Set the immediate function to execute callbacks
+     * @param fn {function} Function to execute
+     * @deprecated
+     */
+    Promise._setImmediateFn = function _setImmediateFn(fn) {
+        Promise._immediateFn = fn;
+    };
+
+    /**
+     * Change the function to execute on unhandled rejection
+     * @param {function} fn Function to execute on unhandled rejection
+     * @deprecated
+     */
+    Promise._setUnhandledRejectionFn = function _setUnhandledRejectionFn(fn) {
+        Promise._unhandledRejectionFn = fn;
+    };
+
+    if (typeof module !== 'undefined' && module.exports) {
+        module.exports = Promise;
+    } else if (!root.Promise) {
+        root.Promise = Promise;
+    }
+
+})(this);
+
+// Fetch Polyfill to provide a wrapper around the XMLHttpRequest functionalities
+// Taken from https://github.com/github/fetch
+(function (self) {
+    'use strict';
+
+    if (self.fetch) {
+        return
+    }
+
+    var support = {
+        searchParams: 'URLSearchParams' in self,
+        iterable: 'Symbol' in self && 'iterator' in Symbol,
+        blob: 'FileReader' in self && 'Blob' in self && (function () {
+            try {
+                new Blob()
+                return true
+            } catch (e) {
+                return false
+            }
+        })(),
+        formData: 'FormData' in self,
+        arrayBuffer: 'ArrayBuffer' in self
+    }
+
+    if (support.arrayBuffer) {
+        var viewClasses = [
+            '[object Int8Array]',
+            '[object Uint8Array]',
+            '[object Uint8ClampedArray]',
+            '[object Int16Array]',
+            '[object Uint16Array]',
+            '[object Int32Array]',
+            '[object Uint32Array]',
+            '[object Float32Array]',
+            '[object Float64Array]'
+        ]
+
+        var isDataView = function (obj) {
+            return obj && DataView.prototype.isPrototypeOf(obj)
+        }
+
+        var isArrayBufferView = ArrayBuffer.isView || function (obj) {
+            return obj && viewClasses.indexOf(Object.prototype.toString.call(obj)) > -1
+        }
+    }
+
+    function normalizeName(name) {
+        if (typeof name !== 'string') {
+            name = String(name)
+        }
+        if (/[^a-z0-9\-#$%&'*+.\^_`|~]/i.test(name)) {
+            throw new TypeError('Invalid character in header field name')
+        }
+        return name.toLowerCase()
+    }
+
+    function normalizeValue(value) {
+        if (typeof value !== 'string') {
+            value = String(value)
+        }
+        return value
+    }
+
+    // Build a destructive iterator for the value list
+    function iteratorFor(items) {
+        var iterator = {
+            next: function () {
+                var value = items.shift()
+                return { done: value === undefined, value: value }
+            }
+        }
+
+        if (support.iterable) {
+            iterator[Symbol.iterator] = function () {
+                return iterator
+            }
+        }
+
+        return iterator
+    }
+
+    function Headers(headers) {
+        this.map = {}
+
+        if (headers instanceof Headers) {
+            headers.forEach(function (value, name) {
+                this.append(name, value)
+            }, this)
+
+        } else if (headers) {
+            Object.getOwnPropertyNames(headers).forEach(function (name) {
+                this.append(name, headers[name])
+            }, this)
+        }
+    }
+
+    Headers.prototype.append = function (name, value) {
+        name = normalizeName(name)
+        value = normalizeValue(value)
+        var oldValue = this.map[name]
+        this.map[name] = oldValue ? oldValue + ',' + value : value
+    }
+
+    Headers.prototype['delete'] = function (name) {
+        delete this.map[normalizeName(name)]
+    }
+
+    Headers.prototype.get = function (name) {
+        name = normalizeName(name)
+        return this.has(name) ? this.map[name] : null
+    }
+
+    Headers.prototype.has = function (name) {
+        return this.map.hasOwnProperty(normalizeName(name))
+    }
+
+    Headers.prototype.set = function (name, value) {
+        this.map[normalizeName(name)] = normalizeValue(value)
+    }
+
+    Headers.prototype.forEach = function (callback, thisArg) {
+        for (var name in this.map) {
+            if (this.map.hasOwnProperty(name)) {
+                callback.call(thisArg, this.map[name], name, this)
+            }
+        }
+    }
+
+    Headers.prototype.keys = function () {
+        var items = []
+        this.forEach(function (value, name) { items.push(name) })
+        return iteratorFor(items)
+    }
+
+    Headers.prototype.values = function () {
+        var items = []
+        this.forEach(function (value) { items.push(value) })
+        return iteratorFor(items)
+    }
+
+    Headers.prototype.entries = function () {
+        var items = []
+        this.forEach(function (value, name) { items.push([name, value]) })
+        return iteratorFor(items)
+    }
+
+    if (support.iterable) {
+        Headers.prototype[Symbol.iterator] = Headers.prototype.entries
+    }
+
+    function consumed(body) {
+        if (body.bodyUsed) {
+            return Promise.reject(new TypeError('Already read'))
+        }
+        body.bodyUsed = true
+    }
+
+    function fileReaderReady(reader) {
+        return new Promise(function (resolve, reject) {
+            reader.onload = function () {
+                resolve(reader.result)
+            }
+            reader.onerror = function () {
+                reject(reader.error)
+            }
+        })
+    }
+
+    function readBlobAsArrayBuffer(blob) {
+        var reader = new FileReader()
+        var promise = fileReaderReady(reader)
+        reader.readAsArrayBuffer(blob)
+        return promise
+    }
+
+    function readBlobAsText(blob) {
+        var reader = new FileReader()
+        var promise = fileReaderReady(reader)
+        reader.readAsText(blob)
+        return promise
+    }
+
+    function readArrayBufferAsText(buf) {
+        var view = new Uint8Array(buf)
+        var chars = new Array(view.length)
+
+        for (var i = 0; i < view.length; i++) {
+            chars[i] = String.fromCharCode(view[i])
+        }
+        return chars.join('')
+    }
+
+    function bufferClone(buf) {
+        if (buf.slice) {
+            return buf.slice(0)
+        } else {
+            var view = new Uint8Array(buf.byteLength)
+            view.set(new Uint8Array(buf))
+            return view.buffer
+        }
+    }
+
+    function Body() {
+        this.bodyUsed = false
+
+        this._initBody = function (body) {
+            this._bodyInit = body
+            if (!body) {
+                this._bodyText = ''
+            } else if (typeof body === 'string') {
+                this._bodyText = body
+            } else if (support.blob && Blob.prototype.isPrototypeOf(body)) {
+                this._bodyBlob = body
+            } else if (support.formData && FormData.prototype.isPrototypeOf(body)) {
+                this._bodyFormData = body
+            } else if (support.searchParams && URLSearchParams.prototype.isPrototypeOf(body)) {
+                this._bodyText = body.toString()
+            } else if (support.arrayBuffer && support.blob && isDataView(body)) {
+                this._bodyArrayBuffer = bufferClone(body.buffer)
+                // IE 10-11 can't handle a DataView body.
+                this._bodyInit = new Blob([this._bodyArrayBuffer])
+            } else if (support.arrayBuffer && (ArrayBuffer.prototype.isPrototypeOf(body) || isArrayBufferView(body))) {
+                this._bodyArrayBuffer = bufferClone(body)
+            } else {
+                throw new Error('unsupported BodyInit type')
+            }
+
+            if (!this.headers.get('content-type')) {
+                if (typeof body === 'string') {
+                    this.headers.set('content-type', 'text/plain;charset=UTF-8')
+                } else if (this._bodyBlob && this._bodyBlob.type) {
+                    this.headers.set('content-type', this._bodyBlob.type)
+                } else if (support.searchParams && URLSearchParams.prototype.isPrototypeOf(body)) {
+                    this.headers.set('content-type', 'application/x-www-form-urlencoded;charset=UTF-8')
+                }
+            }
+        }
+
+        if (support.blob) {
+            this.blob = function () {
+                var rejected = consumed(this)
+                if (rejected) {
+                    return rejected
+                }
+
+                if (this._bodyBlob) {
+                    return Promise.resolve(this._bodyBlob)
+                } else if (this._bodyArrayBuffer) {
+                    return Promise.resolve(new Blob([this._bodyArrayBuffer]))
+                } else if (this._bodyFormData) {
+                    throw new Error('could not read FormData body as blob')
+                } else {
+                    return Promise.resolve(new Blob([this._bodyText]))
+                }
+            }
+
+            this.arrayBuffer = function () {
+                if (this._bodyArrayBuffer) {
+                    return consumed(this) || Promise.resolve(this._bodyArrayBuffer)
+                } else {
+                    return this.blob().then(readBlobAsArrayBuffer)
+                }
+            }
+        }
+
+        this.text = function () {
+            var rejected = consumed(this)
+            if (rejected) {
+                return rejected
+            }
+
+            if (this._bodyBlob) {
+                return readBlobAsText(this._bodyBlob)
+            } else if (this._bodyArrayBuffer) {
+                return Promise.resolve(readArrayBufferAsText(this._bodyArrayBuffer))
+            } else if (this._bodyFormData) {
+                throw new Error('could not read FormData body as text')
+            } else {
+                return Promise.resolve(this._bodyText)
+            }
+        }
+
+        if (support.formData) {
+            this.formData = function () {
+                return this.text().then(decode)
+            }
+        }
+
+        this.json = function () {
+            return this.text().then(JSON.parse)
+        }
+
+        return this
+    }
+
+    // HTTP methods whose capitalization should be normalized
+    var methods = ['DELETE', 'GET', 'HEAD', 'OPTIONS', 'POST', 'PUT']
+
+    function normalizeMethod(method) {
+        var upcased = method.toUpperCase()
+        return (methods.indexOf(upcased) > -1) ? upcased : method
+    }
+
+    function Request(input, options) {
+        options = options || {}
+        var body = options.body
+
+        if (input instanceof Request) {
+            if (input.bodyUsed) {
+                throw new TypeError('Already read')
+            }
+            this.url = input.url
+            this.credentials = input.credentials
+            if (!options.headers) {
+                this.headers = new Headers(input.headers)
+            }
+            this.method = input.method
+            this.mode = input.mode
+            if (!body && input._bodyInit != null) {
+                body = input._bodyInit
+                input.bodyUsed = true
+            }
+        } else {
+            this.url = String(input)
+        }
+
+        this.credentials = options.credentials || this.credentials || 'omit'
+        if (options.headers || !this.headers) {
+            this.headers = new Headers(options.headers)
+        }
+        this.method = normalizeMethod(options.method || this.method || 'GET')
+        this.mode = options.mode || this.mode || null
+        this.referrer = null
+
+        if ((this.method === 'GET' || this.method === 'HEAD') && body) {
+            throw new TypeError('Body not allowed for GET or HEAD requests')
+        }
+        this._initBody(body)
+    }
+
+    Request.prototype.clone = function () {
+        return new Request(this, { body: this._bodyInit })
+    }
+
+    function decode(body) {
+        var form = new FormData()
+        body.trim().split('&').forEach(function (bytes) {
+            if (bytes) {
+                var split = bytes.split('=')
+                var name = split.shift().replace(/\+/g, ' ')
+                var value = split.join('=').replace(/\+/g, ' ')
+                form.append(decodeURIComponent(name), decodeURIComponent(value))
+            }
+        })
+        return form
+    }
+
+    function parseHeaders(rawHeaders) {
+        var headers = new Headers()
+        rawHeaders.split(/\r?\n/).forEach(function (line) {
+            var parts = line.split(':')
+            var key = parts.shift().trim()
+            if (key) {
+                var value = parts.join(':').trim()
+                headers.append(key, value)
+            }
+        })
+        return headers
+    }
+
+    Body.call(Request.prototype)
+
+    function Response(bodyInit, options) {
+        if (!options) {
+            options = {}
+        }
+
+        this.type = 'default'
+        this.status = 'status' in options ? options.status : 200
+        this.ok = this.status >= 200 && this.status < 300
+        this.statusText = 'statusText' in options ? options.statusText : 'OK'
+        this.headers = new Headers(options.headers)
+        this.url = options.url || ''
+        this._initBody(bodyInit)
+    }
+
+    Body.call(Response.prototype)
+
+    Response.prototype.clone = function () {
+        return new Response(this._bodyInit, {
+            status: this.status,
+            statusText: this.statusText,
+            headers: new Headers(this.headers),
+            url: this.url
+        })
+    }
+
+    Response.error = function () {
+        var response = new Response(null, { status: 0, statusText: '' })
+        response.type = 'error'
+        return response
+    }
+
+    var redirectStatuses = [301, 302, 303, 307, 308]
+
+    Response.redirect = function (url, status) {
+        if (redirectStatuses.indexOf(status) === -1) {
+            throw new RangeError('Invalid status code')
+        }
+
+        return new Response(null, { status: status, headers: { location: url } })
+    }
+
+    self.Headers = Headers
+    self.Request = Request
+    self.Response = Response
+
+    self.fetch = function (input, init) {
+        return new Promise(function (resolve, reject) {
+            var request = new Request(input, init)
+            var xhr = new XMLHttpRequest()
+
+            xhr.onload = function () {
+                var options = {
+                    status: xhr.status,
+                    statusText: xhr.statusText,
+                    headers: parseHeaders(xhr.getAllResponseHeaders() || '')
+                }
+                options.url = 'responseURL' in xhr ? xhr.responseURL : options.headers.get('X-Request-URL')
+                var body = 'response' in xhr ? xhr.response : xhr.responseText
+                resolve(new Response(body, options))
+            }
+
+            xhr.onerror = function () {
+                reject(new TypeError('Network request failed'))
+            }
+
+            xhr.ontimeout = function () {
+                reject(new TypeError('Network request failed'))
+            }
+
+            xhr.open(request.method, request.url, true)
+
+            if (request.credentials === 'include') {
+                xhr.withCredentials = true
+            }
+
+            if ('responseType' in xhr && support.blob) {
+                xhr.responseType = 'blob'
+            }
+
+            request.headers.forEach(function (value, name) {
+                xhr.setRequestHeader(name, value)
+            })
+
+            xhr.send(typeof request._bodyInit === 'undefined' ? null : request._bodyInit)
+        })
+    }
+    self.fetch.polyfill = true
+})(typeof self !== 'undefined' ? self : this);
+
+// Polyfill to add array forEach support if it does not yet exist on the page
+// Production steps of ECMA-262, Edition 5, 15.4.4.18
+// Reference: http://es5.github.io/#x15.4.4.18
+if (!Array.prototype.forEach) {
+
+    Array.prototype.forEach = function (callback, thisArg) {
+
+        var T, k;
+
+        if (this === null) {
+            throw new TypeError('this is null or not defined');
+        }
+
+        // 1. Let O be the result of calling toObject() passing the
+        // |this| value as the argument.
+        var O = Object(this);
+
+        // 2. Let lenValue be the result of calling the Get() internal
+        // method of O with the argument "length".
+        // 3. Let len be toUint32(lenValue).
+        var len = O.length >>> 0;
+
+        // 4. If isCallable(callback) is false, throw a TypeError exception. 
+        // See: http://es5.github.com/#x9.11
+        if (typeof callback !== 'function') {
+            throw new TypeError(callback + ' is not a function');
+        }
+
+        // 5. If thisArg was supplied, let T be thisArg; else let
+        // T be undefined.
+        if (arguments.length > 1) {
+            T = thisArg;
+        }
+
+        // 6. Let k be 0
+        k = 0;
+
+        // 7. Repeat, while k < len
+        while (k < len) {
+
+            var kValue;
+
+            // a. Let Pk be ToString(k).
+            //    This is implicit for LHS operands of the in operator
+            // b. Let kPresent be the result of calling the HasProperty
+            //    internal method of O with argument Pk.
+            //    This step can be combined with c
+            // c. If kPresent is true, then
+            if (k in O) {
+
+                // i. Let kValue be the result of calling the Get internal
+                // method of O with argument Pk.
+                kValue = O[k];
+
+                // ii. Call the Call internal method of callback with T as
+                // the this value and argument list containing kValue, k, and O.
+                callback.call(T, kValue, k, O);
+            }
+            // d. Increase k by 1.
+            k++;
+        }
+        // 8. return undefined
+    };
+}
+
+// Define a polyfill for the Object.keys function which allows for finding property keys
+// From https://developer.mozilla.org/en-US/docs/Web/JavaScript/Reference/Global_Objects/Object/keys
+if (!Object.keys) {
+    Object.keys = (function () {
+        'use strict';
+        var hasOwnProperty = Object.prototype.hasOwnProperty,
+            hasDontEnumBug = !({ toString: null }).propertyIsEnumerable('toString'),
+            dontEnums = [
+                'toString',
+                'toLocaleString',
+                'valueOf',
+                'hasOwnProperty',
+                'isPrototypeOf',
+                'propertyIsEnumerable',
+                'constructor'
+            ],
+            dontEnumsLength = dontEnums.length;
+
+        return function (obj) {
+            if (typeof obj !== 'object' && (typeof obj !== 'function' || obj === null)) {
+                throw new TypeError('Object.keys called on non-object');
+            }
+
+            var result = [], prop, i;
+
+            for (prop in obj) {
+                if (hasOwnProperty.call(obj, prop)) {
+                    result.push(prop);
+                }
+            }
+
+            if (hasDontEnumBug) {
+                for (i = 0; i < dontEnumsLength; i++) {
+                    if (hasOwnProperty.call(obj, dontEnums[i])) {
+                        result.push(dontEnums[i]);
+                    }
+                }
+            }
+            return result;
+        };
+    }());
+}
